@@ -8,9 +8,6 @@ UserSettings/
 Logs/
 *DoNotShip/
 
-# No LFS
-Assets/Sprites/*.png*
-
 # OS metadata
 .DS_Store
 Thumbs.db
