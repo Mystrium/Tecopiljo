@@ -9,7 +9,7 @@ Logs/
 *DoNotShip/
 
 # No LFS
-Assets/Sprites/
+Assets/Sprites/*.png
 
 # OS metadata
 .DS_Store
