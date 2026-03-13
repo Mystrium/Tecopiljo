@@ -1,0 +1,37 @@
+# Unity generated
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild*/
+[Bb]uilds/
+UserSettings/
+Logs/
+*DoNotShip/
+
+# No LFS
+Assets/Sprites/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Visual Studio / Rider
+.vs/
+.vscode/
+.utmp/
+*.sln
+*.csproj
+*.user
+*.userprefs
+.idea/
+
+# Gradle / Android build
+gradle/
+.gradle/
+*.apk
+*.aab
+
+*.meta
+
+# Other caches
+MemoryCaptures/
