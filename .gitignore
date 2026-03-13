@@ -31,7 +31,5 @@ gradle/
 *.apk
 *.aab
 
-*.meta
-
 # Other caches
 MemoryCaptures/
