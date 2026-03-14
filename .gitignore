@@ -30,3 +30,6 @@ gradle/
 
 # Other caches
 MemoryCaptures/
+
+# Krita backup files
+*.kra~
