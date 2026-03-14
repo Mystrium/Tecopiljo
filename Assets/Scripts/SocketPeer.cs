@@ -28,14 +28,10 @@ public class SocketPeer : IDisposable {
     readonly ConcurrentQueue<string> sendQueue = new ConcurrentQueue<string>();
     readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0);
 
+    public event Action OnHosted;
     public event Action OnConnected;
     public event Action OnDisconnected;
     public event Action<string> OnMessage;
-    public bool IsConnected => client != null && client.Connected;
-
-    // HEARTBEAT optional
-    public bool EnableHeartbeat = true;
-    public int HeartbeatIntervalSec = 5;
 
     // === HOST ===
     public async Task StartHostAsync(int port) {
@@ -52,10 +48,9 @@ public class SocketPeer : IDisposable {
 
             listener.Start();
 
-            Debug.Log($"[SimpleSocketPeer] Listening on port {port}");
-            // Accept one client (blocking) - AcceptTcpClientAsync will be cancelled when listener.Stop() is called
             try {
                 var acceptTask = listener.AcceptTcpClientAsync();
+                UnityMainThreadDispatcher.Enqueue(()=> OnHosted?.Invoke());
                 acceptTask.Wait(cts.Token); // block here but cancellable
                 client = acceptTask.Result;
                 try { client.NoDelay = true; } catch { }
@@ -117,6 +112,7 @@ public class SocketPeer : IDisposable {
             catch (Exception ex) { Debug.LogWarning("[SimpleSocketPeer] ReceiveLoop error: " + ex.Message); }
             finally {
                 // connection closed
+                Debug.Log("CLOSED");
                 UnityMainThreadDispatcher.Enqueue(()=> OnDisconnected?.Invoke());
                 CloseInternal();
             }
@@ -126,7 +122,7 @@ public class SocketPeer : IDisposable {
             try {
                 while (!cts.IsCancellationRequested && client != null && client.Connected) {
                     // чекаємо сигнал (без таймауту або з невеликим таймаутом)
-                    await sendSignal.WaitAsync(1000, cts.Token); // додатково таймаут 1s, щоб перевіряти heartbeat/закриття
+                    await sendSignal.WaitAsync(100, cts.Token); // додатково таймаут 1s, щоб перевіряти heartbeat/закриття
                     // після пробудження відправляємо всі наявні повідомлення
                     while (sendQueue.TryDequeue(out var msg)) {
                         var bytes = Encoding.UTF8.GetBytes(msg);
@@ -186,7 +182,10 @@ public class SocketPeer : IDisposable {
             if (tasks.Count > 0) await Task.WhenAny(Task.WhenAll(tasks), Task.Delay(1000));
         }
         catch (Exception ex) { Debug.LogWarning("[SimpleSocketPeer] CloseAsync error: " + ex.Message); }
-        finally { Dispose(); }
+        finally {
+            Dispose();
+            UnityMainThreadDispatcher.Enqueue(()=> OnDisconnected?.Invoke());
+        }
     }
 
     void CloseInternal() {
