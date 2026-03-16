@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 
-public class UnityMainThreadDispatcher : MonoBehaviour {
+public class MainDispatcher : MonoBehaviour {
     static readonly Queue<Action> _actions = new Queue<Action>();
-    static UnityMainThreadDispatcher _instance;
+    static MainDispatcher _instance;
 
     void Awake() { _instance = this; DontDestroyOnLoad(gameObject); }
 

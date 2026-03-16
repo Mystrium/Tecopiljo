@@ -45,7 +45,7 @@ public class SocketPeer : IDisposable {
         catch { /* ignore */ }
 
         listener.Start();
-        UnityMainThreadDispatcher.Enqueue(() => OnHosted?.Invoke());
+        MainDispatcher.Enqueue(() => OnHosted?.Invoke());
 
         // Запускаємо цикл прийняття клієнтів у фоні (не блокуємо цей метод)
         _ = Task.Run(() => AcceptClientsLoop(mainCts.Token), mainCts.Token);
@@ -61,14 +61,14 @@ public class SocketPeer : IDisposable {
                 
                 // Створюємо новий об'єкт для роботи з конкретним клієнтом
                 var peer = new ConnectedPeer(client, clientId, 
-                    onMessage: (msg) => UnityMainThreadDispatcher.Enqueue(() => OnRequest?.Invoke(clientId, msg)),
+                    onMessage: (msg) => MainDispatcher.Enqueue(() => OnRequest?.Invoke(clientId, msg)),
                     onDisconnected: () => {
                         connectedClients.TryRemove(clientId, out _);
-                        UnityMainThreadDispatcher.Enqueue(() => OnServerClientDisconnected?.Invoke(clientId));
+                        MainDispatcher.Enqueue(() => OnServerClientDisconnected?.Invoke(clientId));
                     });
 
                 connectedClients.TryAdd(clientId, peer);
-                UnityMainThreadDispatcher.Enqueue(() => OnServerClientConnected?.Invoke(clientId));
+                MainDispatcher.Enqueue(() => OnServerClientConnected?.Invoke(clientId));
 
                 peer.StartLoops();
             }
@@ -102,17 +102,17 @@ public class SocketPeer : IDisposable {
         
         if (completed != connectTask) {
             tcpClient.Close();
-            UnityMainThreadDispatcher.Enqueue(() => Debug.LogWarning("[SocketPeer] Connect timeout"));
+            MainDispatcher.Enqueue(() => Debug.LogWarning("[SocketPeer] Connect timeout"));
             return;
         }
 
         localClientPeer = new ConnectedPeer(tcpClient, 0, 
-            onMessage: (msg) => UnityMainThreadDispatcher.Enqueue(() => OnResponse?.Invoke(msg)),
-            onDisconnected: () => UnityMainThreadDispatcher.Enqueue(() => OnClientDisconnected?.Invoke())
+            onMessage: (msg) => MainDispatcher.Enqueue(() => OnResponse?.Invoke(msg)),
+            onDisconnected: () => MainDispatcher.Enqueue(() => OnClientDisconnected?.Invoke())
         );
 
         localClientPeer.StartLoops();
-        UnityMainThreadDispatcher.Enqueue(() => OnClientConnected?.Invoke());
+        MainDispatcher.Enqueue(() => OnClientConnected?.Invoke());
     }
 
     public void ClientSend(string message) {

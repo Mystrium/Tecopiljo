@@ -1,48 +1,46 @@
 using System.Threading.Tasks;
-using System.Net.Sockets;
 using UnityEngine.UI;
 using UnityEngine;
 using System.Net;
+using System.Net.Sockets;
 
 public class NetworkUIController : MonoBehaviour {
+    [Header("Network UI")]
     public InputField ipInput;
     public InputField portInput;
     public Button hostBtn;
     public Button connectBtn;
     public Text statusText;
 
-    // test
+    [Header("Game UI")]
     public Button moveBtn;
     public RectTransform movableRect;
+    public Button startPlay;
 
-    // panels
+    [Header("Panels")]
     public GameObject mainMenuPanel;
     public GameObject multiplayerPanel;
     public GameObject gamePanel;
-
     public Button singlePlayer;
     public Button multiPlayer;
 
-    public Button startPlay;
+    // TCP Sockets
+    private SocketPeer serverPeer;
+    private SocketPeer clientPeer;
 
-    // peers
-    SocketPeer serverPeer;
-    SocketPeer clientPeer;
-
-    // Server.host > Client.connect > Client.ClientSend > Server.OnRequest > Logic > Server.ServerBroadcast > Client.OnResponse
-
+    // Backend logic
+    private ServerLogic serverLogic;
+    private ClientLogic clientLogic;
 
     void Start() {
-        hostBtn.onClick.AddListener(()=> _ = StartHost());
-        connectBtn.onClick.AddListener(()=> _ = StartClient());
-        moveBtn.onClick.AddListener(OnLocalMove);
+        hostBtn.onClick.AddListener(() => _ = StartHost());
+        connectBtn.onClick.AddListener(() => _ = StartClient());
         startPlay.onClick.AddListener(ShowGame);
 
-        singlePlayer.onClick.AddListener(()=> _ = StartHost());
+        singlePlayer.onClick.AddListener(() => _ = StartHost()); // illusion
         multiPlayer.onClick.AddListener(ShowMultiplayer);
 
         ShowMainMenu();
-
         if (string.IsNullOrEmpty(portInput.text)) portInput.text = "7777";
     }
 
@@ -53,24 +51,9 @@ public class NetworkUIController : MonoBehaviour {
         }
     }
 
-    public void ShowMainMenu() {
-        mainMenuPanel.SetActive(true);
-        multiplayerPanel.SetActive(false);
-        gamePanel.SetActive(false);
-    }
-
-    public void ShowMultiplayer() {
-        mainMenuPanel.SetActive(false);
-        multiplayerPanel.SetActive(true);
-        gamePanel.SetActive(false);
-    }
-
-    public void ShowGame() {
-        mainMenuPanel.SetActive(false);
-        multiplayerPanel.SetActive(false);
-        gamePanel.SetActive(true);
-    }
-
+    public void ShowMainMenu() {    mainMenuPanel.SetActive(true);  multiplayerPanel.SetActive(false); gamePanel.SetActive(false); }
+    public void ShowMultiplayer() { mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(true);  gamePanel.SetActive(false); }
+    public void ShowGame() {        mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(false); gamePanel.SetActive(true);  }
 
     async Task StartHost() {
         SetButtonsInteractable(false);
@@ -78,18 +61,13 @@ public class NetworkUIController : MonoBehaviour {
 
         serverPeer = new SocketPeer();
 
-        serverPeer.OnHosted += () => _ = StartLocalClient();
+        serverLogic = new ServerLogic(serverPeer.ServerBroadcast);
 
-        serverPeer.OnServerClientConnected += (clientId) => {
-            Debug.Log($"[Server] Player {clientId} connected.");
-        };
-        serverPeer.OnServerClientDisconnected += (clientId) => {
-            Debug.Log($"[Server] Player {clientId} disconected.");
-        };
-        
-        serverPeer.OnRequest += (clientId, msg) => {
-            serverPeer.ServerBroadcast(msg); 
-        };
+        serverPeer.OnHosted += () => _ = StartLocalClient();
+        serverPeer.OnServerClientConnected += (clientId) => Debug.Log($"[Server] Player {clientId} connected.");
+        serverPeer.OnServerClientDisconnected += (clientId) => Debug.Log($"[Server] Player {clientId} disconected.");
+
+        serverPeer.OnRequest += serverLogic.ProcessRequest;
 
         int port = int.Parse(portInput.text);
         await serverPeer.StartHostAsync(port);
@@ -98,6 +76,8 @@ public class NetworkUIController : MonoBehaviour {
     async Task StartLocalClient() {
         clientPeer = new SocketPeer();
         int port = int.Parse(portInput.text);
+
+        SetupClientLogic();
 
         clientPeer.OnClientConnected += () => { 
             statusText.text = GetLocalIPAddress() + ':' + port; 
@@ -109,8 +89,6 @@ public class NetworkUIController : MonoBehaviour {
             ShowMainMenu(); 
         };
 
-        clientPeer.OnResponse += (msg) => HandleIncoming(msg);
-
         await clientPeer.StartClientAsync("127.0.0.1", port);
     }
 
@@ -119,6 +97,8 @@ public class NetworkUIController : MonoBehaviour {
         statusText.text = "Connecting...";
 
         clientPeer = new SocketPeer();
+
+        SetupClientLogic();
 
         clientPeer.OnClientConnected += () => { 
             statusText.text = "Connected to host"; 
@@ -131,26 +111,19 @@ public class NetworkUIController : MonoBehaviour {
             ShowMainMenu(); 
         };
 
-        clientPeer.OnResponse += (msg) => HandleIncoming(msg);
-
         string ip = ipInput.text.Trim();
         int port = int.Parse(portInput.text);
         await clientPeer.StartClientAsync(ip, port);
     }
 
-    void HandleIncoming(string json)  {
-        statusText.text = "Msg: " + json;
-        try  {
-            var m = JsonUtility.FromJson<NetMsg>(json);
-            
-            if (m.type == "move")  {
-                // Оскільки гравців тепер багато, в NetMsg добре було б додати поле ID гравця,
-                // щоб знати, який саме Rect рухати.
-                movableRect.anchoredPosition = new Vector2(m.x, m.y);
-            }
-        } catch { }
+    private void SetupClientLogic() {
+        clientLogic = new ClientLogic(movableRect, clientPeer.ClientSend);
+        moveBtn.onClick.AddListener(clientLogic.IntentToMove);
+        clientPeer.OnResponse += clientLogic.ProcessResponse;
     }
 
+
+    // --- Helpers ---
     public string GetLocalIPAddress() {
         string localIP = "127.0.0.1";
         try {
@@ -163,22 +136,6 @@ public class NetworkUIController : MonoBehaviour {
             }
         } catch { }
         return localIP;
-    }
-
-    void OnLocalMove() {
-        var pos = RandomUINearScreen();
-        var msg = JsonUtility.ToJson(new NetMsg { type = "move", x = pos[0], y = pos[1] });
-
-        if (clientPeer != null)
-            clientPeer.ClientSend(msg);
-    }
-
-    int[] RandomUINearScreen() {
-        int halfW = Screen.width / 2;
-        int halfH = Screen.height / 2;
-        int x = Random.Range(-halfW + 50, halfW - 50);
-        int y = Random.Range(-halfH + 50, halfH - 50);
-        return new int[2] {x, y};
     }
 
     public void OnQuitPressed() {
@@ -196,12 +153,9 @@ public class NetworkUIController : MonoBehaviour {
     }
 
     void SetButtonsInteractable(bool state) {
-        UnityMainThreadDispatcher.Enqueue(() => {
+        MainDispatcher.Enqueue(() => {
             hostBtn.interactable = state;
             connectBtn.interactable = state;
         });
     }
-
-    [System.Serializable]
-    public class NetMsg { public string type; public float x; public float y; }
 }
