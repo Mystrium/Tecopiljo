@@ -8,197 +8,237 @@ using System.Net;
 using System;
 
 /// <summary>
-/// Simple TCP peer that can act as Host or Client.
-/// - Length-prefixed messages (4 bytes network order)
-/// - Events are invoked on main thread via UnityMainThreadDispatcher
-/// Usage:
-///   var peer = new SimpleSocketPeer();
-///   peer.OnMessage += (msg) => { /* handle on main thread */ };
-///   await peer.StartHostAsync(7777);
-///   await peer.SendAsync("hello");
-///   await peer.CloseAsync();
+/// Підтримує декілька підключень для Хоста, і одне для Клієнта.
+/// Хост-гравець створює два екземпляри: один як сервер (StartHostAsync), 
+/// інший як клієнт (StartClientAsync на 127.0.0.1).
 /// </summary>
 public class SocketPeer : IDisposable {
-    TcpListener listener;
-    TcpClient client;
-    NetworkStream stream;
-    CancellationTokenSource cts;
-    Task receiveLoopTask;
-    Task sendLoopTask;
-    readonly ConcurrentQueue<string> sendQueue = new ConcurrentQueue<string>();
-    readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0);
+    private TcpListener listener;
+    private CancellationTokenSource mainCts;
+    
+    // Для клієнта
+    private ConnectedPeer localClientPeer;
+    
+    // Для сервера
+    private readonly ConcurrentDictionary<int, ConnectedPeer> connectedClients = new ConcurrentDictionary<int, ConnectedPeer>();
+    private int nextClientId = 1;
 
+    // === ПОДІЇ СЕРВЕРА ===
     public event Action OnHosted;
-    public event Action OnConnected;
-    public event Action OnDisconnected;
-    public event Action<string> OnMessage;
+    public event Action<int> OnServerClientConnected;
+    public event Action<int> OnServerClientDisconnected;
+    public event Action<int, string> OnRequest;
 
-    // === HOST ===
+    // === ПОДІЇ КЛІЄНТА ===
+    public event Action OnClientConnected;
+    public event Action OnClientDisconnected;
+    public event Action<string> OnResponse;
+
+    // ==========================================
+    // СЕРВЕРНА ЧАСТИНА
+    // ==========================================
     public async Task StartHostAsync(int port) {
-        await Task.Run(() => {
-            cts = new CancellationTokenSource();
-            // create listener
-            listener = new TcpListener(IPAddress.Any, port);
+        mainCts = new CancellationTokenSource();
+        listener = new TcpListener(IPAddress.Any, port);
 
-            // allow quick reuse on many platforms
-            try {
-                listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            }
-            catch { /* ignore if platform doesn't allow */ }
+        try { listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true); } 
+        catch { /* ignore */ }
 
-            listener.Start();
+        listener.Start();
+        UnityMainThreadDispatcher.Enqueue(() => OnHosted?.Invoke());
 
-            try {
-                var acceptTask = listener.AcceptTcpClientAsync();
-                UnityMainThreadDispatcher.Enqueue(()=> OnHosted?.Invoke());
-                acceptTask.Wait(cts.Token); // block here but cancellable
-                client = acceptTask.Result;
-                try { client.NoDelay = true; } catch { }
-            } catch (OperationCanceledException) { return; }
-            catch (Exception ex) {
-                Debug.LogWarning("[SimpleSocketPeer] Host accept error: " + ex.Message);
-                CloseInternal(); 
-                return;
-            }
-
-            // set up stream and start loops
-            stream = client.GetStream();
-            StartLoops();
-            // notify main thread
-            UnityMainThreadDispatcher.Enqueue(()=> OnConnected?.Invoke());
-        });
+        // Запускаємо цикл прийняття клієнтів у фоні (не блокуємо цей метод)
+        _ = Task.Run(() => AcceptClientsLoop(mainCts.Token), mainCts.Token);
     }
 
-    // === CLIENT ===
+    private async Task AcceptClientsLoop(CancellationToken token) {
+        try {
+            while (!token.IsCancellationRequested) {
+                var client = await listener.AcceptTcpClientAsync();
+                try { client.NoDelay = true; } catch { }
+
+                int clientId = nextClientId++;
+                
+                // Створюємо новий об'єкт для роботи з конкретним клієнтом
+                var peer = new ConnectedPeer(client, clientId, 
+                    onMessage: (msg) => UnityMainThreadDispatcher.Enqueue(() => OnRequest?.Invoke(clientId, msg)),
+                    onDisconnected: () => {
+                        connectedClients.TryRemove(clientId, out _);
+                        UnityMainThreadDispatcher.Enqueue(() => OnServerClientDisconnected?.Invoke(clientId));
+                    });
+
+                connectedClients.TryAdd(clientId, peer);
+                UnityMainThreadDispatcher.Enqueue(() => OnServerClientConnected?.Invoke(clientId));
+
+                peer.StartLoops();
+            }
+        }
+        catch (OperationCanceledException) { /* Зупинено */ }
+        catch (Exception ex) { Debug.LogWarning("[SocketPeer] Accept loop error: " + ex.Message); }
+    }
+
+    public void ServerBroadcast(string message) {
+        foreach (var client in connectedClients.Values) {
+            client.Send(message);
+        }
+    }
+
+    public void ServerSendTo(int clientId, string message) {
+        if (connectedClients.TryGetValue(clientId, out var client)) {
+            client.Send(message);
+        }
+    }
+
+    // ==========================================
+    // КЛІЄНТСЬКА ЧАСТИНА
+    // ==========================================
     public async Task StartClientAsync(string host, int port, int connectTimeoutMs = 8000) {
-        cts = new CancellationTokenSource();
-        client = new TcpClient();
-        var connectTask = client.ConnectAsync(host, port);
-        var timeoutTask = Task.Delay(connectTimeoutMs, cts.Token);
+        mainCts = new CancellationTokenSource();
+        var tcpClient = new TcpClient();
+        
+        var connectTask = tcpClient.ConnectAsync(host, port);
+        var timeoutTask = Task.Delay(connectTimeoutMs, mainCts.Token);
         var completed = await Task.WhenAny(connectTask, timeoutTask);
+        
         if (completed != connectTask) {
-            // timeout
-            CloseInternal();
-            UnityMainThreadDispatcher.Enqueue(()=> Debug.LogWarning("[SimpleSocketPeer] Connect timeout"));
+            tcpClient.Close();
+            UnityMainThreadDispatcher.Enqueue(() => Debug.LogWarning("[SocketPeer] Connect timeout"));
             return;
         }
 
-        stream = client.GetStream();
-        StartLoops();
-        UnityMainThreadDispatcher.Enqueue(()=> OnConnected?.Invoke());
+        localClientPeer = new ConnectedPeer(tcpClient, 0, 
+            onMessage: (msg) => UnityMainThreadDispatcher.Enqueue(() => OnResponse?.Invoke(msg)),
+            onDisconnected: () => UnityMainThreadDispatcher.Enqueue(() => OnClientDisconnected?.Invoke())
+        );
+
+        localClientPeer.StartLoops();
+        UnityMainThreadDispatcher.Enqueue(() => OnClientConnected?.Invoke());
     }
 
-    // start send/receive loops
-    void StartLoops() {
-        // receive loop
-        receiveLoopTask = Task.Run(async () => {
+    public void ClientSend(string message) {
+        localClientPeer?.Send(message);
+    }
+
+    // ==========================================
+    // ОЧИЩЕННЯ
+    // ==========================================
+    public void CloseAll() {
+        mainCts?.Cancel();
+
+        try { listener?.Stop(); } catch { }
+
+        localClientPeer?.Close();
+
+        foreach (var client in connectedClients.Values) {
+            client.Close();
+        }
+        connectedClients.Clear();
+    }
+
+    public void Dispose() {
+        CloseAll();
+        mainCts?.Dispose();
+    }
+
+    // ==========================================
+    // ВНУТРІШНІЙ КЛАС ДЛЯ ОБРОБКИ З'ЄДНАННЯ
+    // ==========================================
+    private class ConnectedPeer {
+        public readonly int Id;
+        private readonly TcpClient client;
+        private readonly NetworkStream stream;
+        private readonly CancellationTokenSource peerCts;
+        private readonly ConcurrentQueue<string> sendQueue = new ConcurrentQueue<string>();
+        private readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0);
+        
+        private readonly Action<string> onMessage;
+        private readonly Action onDisconnected;
+
+        public ConnectedPeer(TcpClient client, int id, Action<string> onMessage, Action onDisconnected) {
+            this.client = client;
+            this.Id = id;
+            this.stream = client.GetStream();
+            this.onMessage = onMessage;
+            this.onDisconnected = onDisconnected;
+            this.peerCts = new CancellationTokenSource();
+        }
+
+        public void StartLoops() {
+            _ = Task.Run(ReceiveLoop, peerCts.Token);
+            _ = Task.Run(SendLoop, peerCts.Token);
+        }
+
+        public void Send(string message) {
+            if (string.IsNullOrEmpty(message) || peerCts.IsCancellationRequested) return;
+            sendQueue.Enqueue(message);
+            try { sendSignal.Release(); } catch { }
+        }
+
+        private async Task ReceiveLoop() {
             try {
                 var lenBuf = new byte[4];
-                while (!cts.IsCancellationRequested && client != null && client.Connected) {
-                    // read length
-                    int read = await ReadExactlyAsync(lenBuf, 0, 4, cts.Token);
+                while (!peerCts.IsCancellationRequested && client.Connected) {
+                    int read = await ReadExactlyAsync(lenBuf, 0, 4, peerCts.Token);
                     if (read == 0) break;
+
                     int netlen = BitConverter.ToInt32(lenBuf, 0);
                     int len = IPAddress.NetworkToHostOrder(netlen);
                     if (len <= 0) continue;
+
                     var buf = new byte[len];
-                    read = await ReadExactlyAsync(buf, 0, len, cts.Token);
+                    read = await ReadExactlyAsync(buf, 0, len, peerCts.Token);
                     if (read == 0) break;
+
                     string msg = Encoding.UTF8.GetString(buf);
-                    UnityMainThreadDispatcher.Enqueue(()=> OnMessage?.Invoke(msg));
+                    onMessage?.Invoke(msg);
                 }
             }
-            catch (OperationCanceledException) { /* canceled */ }
-            catch (Exception ex) { Debug.LogWarning("[SimpleSocketPeer] ReceiveLoop error: " + ex.Message); }
-            finally {
-                // connection closed
-                Debug.Log("CLOSED");
-                UnityMainThreadDispatcher.Enqueue(()=> OnDisconnected?.Invoke());
-                CloseInternal();
-            }
-        }, cts.Token);
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Debug.LogWarning($"[SocketPeer] Client {Id} Receive error: " + ex.Message); }
+            finally { Close(); }
+        }
 
-        sendLoopTask = Task.Run(async () => {
+        private async Task SendLoop() {
             try {
-                while (!cts.IsCancellationRequested && client != null && client.Connected) {
-                    // чекаємо сигнал (без таймауту або з невеликим таймаутом)
-                    await sendSignal.WaitAsync(100, cts.Token); // додатково таймаут 1s, щоб перевіряти heartbeat/закриття
-                    // після пробудження відправляємо всі наявні повідомлення
+                while (!peerCts.IsCancellationRequested && client.Connected) {
+                    await sendSignal.WaitAsync(100, peerCts.Token);
+
                     while (sendQueue.TryDequeue(out var msg)) {
                         var bytes = Encoding.UTF8.GetBytes(msg);
                         int netlen = IPAddress.HostToNetworkOrder(bytes.Length);
                         var lenBytes = BitConverter.GetBytes(netlen);
-                        try {
-                            await stream.WriteAsync(lenBytes, 0, 4, cts.Token);
-                            await stream.WriteAsync(bytes, 0, bytes.Length, cts.Token);
-                            await stream.FlushAsync(cts.Token);
-                        }
-                        catch (OperationCanceledException) { break; }
+
+                        await stream.WriteAsync(lenBytes, 0, 4, peerCts.Token);
+                        await stream.WriteAsync(bytes, 0, bytes.Length, peerCts.Token);
+                        await stream.FlushAsync(peerCts.Token);
                     }
                 }
             }
-            catch (OperationCanceledException) { /* cancelled */ }
-            catch (Exception ex) { Debug.LogWarning("[SimpleSocketPeer] SendLoop error: " + ex.Message); }
-        }, cts.Token);
-    }
-
-    // async read exactly
-    async Task<int> ReadExactlyAsync(byte[] buffer, int offset, int count, CancellationToken token) {
-        int total = 0;
-        while (total < count) {
-            int r = await stream.ReadAsync(buffer, offset + total, count - total, token);
-            if (r == 0) return 0;
-            total += r;
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Debug.LogWarning($"[SocketPeer] Client {Id} Send error: " + ex.Message); }
+            finally { Close(); }
         }
-        return total;
-    }
 
-    public void Send(string message) {
-        if (string.IsNullOrEmpty(message)) return;
-        sendQueue.Enqueue(message);
-        // одразу сигналимо send-loop, щоб він не сидів у Task.Delay
-        try { sendSignal.Release(); } catch { /* ignore if disposed */ }
-    }
-
-    // close everything gracefully
-    public async Task CloseAsync() {
-        if (cts != null && !cts.IsCancellationRequested) cts.Cancel();
-
-        try {
-            // stop receiving/accepting
-            if (listener != null) {
-                try { listener.Stop(); } catch {}
+        private async Task<int> ReadExactlyAsync(byte[] buffer, int offset, int count, CancellationToken token) {
+            int total = 0;
+            while (total < count) {
+                int r = await stream.ReadAsync(buffer, offset + total, count - total, token);
+                if (r == 0) return 0;
+                total += r;
             }
-
-            if (client != null) {
-                try { client.Client.Shutdown(SocketShutdown.Both); } catch {}
-                try { client.Close(); } catch {}
-            }
-
-            // wait small time for loops to end
-            var tasks = new System.Collections.Generic.List<Task>();
-            if (receiveLoopTask != null) tasks.Add(receiveLoopTask);
-            if (sendLoopTask != null) tasks.Add(sendLoopTask);
-            if (tasks.Count > 0) await Task.WhenAny(Task.WhenAll(tasks), Task.Delay(1000));
+            return total;
         }
-        catch (Exception ex) { Debug.LogWarning("[SimpleSocketPeer] CloseAsync error: " + ex.Message); }
-        finally {
-            Dispose();
-            UnityMainThreadDispatcher.Enqueue(()=> OnDisconnected?.Invoke());
+
+        private bool isClosed = false;
+        public void Close() {
+            if (isClosed) return;
+            isClosed = true;
+
+            try { peerCts.Cancel(); } catch { }
+            try { stream?.Close(); } catch { }
+            try { client?.Close(); } catch { }
+
+            onDisconnected?.Invoke();
         }
-    }
-
-    void CloseInternal() {
-        try { cts?.Cancel(); } catch {}
-        try { stream?.Close(); } catch {}
-        try { client?.Close(); } catch {}
-        try { listener?.Stop(); } catch {}
-        stream = null; client = null; listener = null;
-    }
-
-    public void Dispose() {
-        CloseInternal();
-        try { cts?.Dispose(); } catch {}
-        cts = null;
     }
 }

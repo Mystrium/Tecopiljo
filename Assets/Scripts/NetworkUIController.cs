@@ -9,10 +9,13 @@ public class NetworkUIController : MonoBehaviour {
     public InputField portInput;
     public Button hostBtn;
     public Button connectBtn;
-    public Button moveBtn;
     public Text statusText;
+
+    // test
+    public Button moveBtn;
     public RectTransform movableRect;
 
+    // panels
     public GameObject mainMenuPanel;
     public GameObject multiplayerPanel;
     public GameObject gamePanel;
@@ -20,14 +23,22 @@ public class NetworkUIController : MonoBehaviour {
     public Button singlePlayer;
     public Button multiPlayer;
 
-    SocketPeer peer;
+    public Button startPlay;
+
+    // peers
+    SocketPeer serverPeer;
+    SocketPeer clientPeer;
+
+    // Server.host > Client.connect > Client.ClientSend > Server.OnRequest > Logic > Server.ServerBroadcast > Client.OnResponse
+
 
     void Start() {
         hostBtn.onClick.AddListener(()=> _ = StartHost());
         connectBtn.onClick.AddListener(()=> _ = StartClient());
         moveBtn.onClick.AddListener(OnLocalMove);
+        startPlay.onClick.AddListener(ShowGame);
 
-        singlePlayer.onClick.AddListener(()=> _ = ConnectLocaly());
+        singlePlayer.onClick.AddListener(()=> _ = StartHost());
         multiPlayer.onClick.AddListener(ShowMultiplayer);
 
         ShowMainMenu();
@@ -60,51 +71,84 @@ public class NetworkUIController : MonoBehaviour {
         gamePanel.SetActive(true);
     }
 
-    async Task ConnectLocaly() {
-        peer = new SocketPeer();
-        peer.OnHosted += () => _ = LocalPlay();
-
-        await peer.StartHostAsync(7777);
-    }
-
-    async Task LocalPlay() {
-        SocketPeer clt = new SocketPeer();
-        clt.OnConnected += () => { ShowGame(); };
-        clt.OnMessage += (msg) => HandleIncoming(msg);
-
-        await clt.StartClientAsync("127.0.0.1", 7777);
-    }
 
     async Task StartHost() {
         SetButtonsInteractable(false);
-        peer = new SocketPeer();
-        peer.OnConnected += () => { statusText.text = "Client connected"; SetButtonsInteractable(true); ShowGame(); };
-        peer.OnDisconnected += () => { statusText.text = "Client disconnected"; SetButtonsInteractable(true); ShowMainMenu(); };
-        peer.OnMessage += (msg) => HandleIncoming(msg);
-
         statusText.text = "Starting host on " + GetLocalIPAddress() + ":" + portInput.text;
-        await peer.StartHostAsync(int.Parse(portInput.text));
+
+        serverPeer = new SocketPeer();
+
+        serverPeer.OnHosted += () => _ = StartLocalClient();
+
+        serverPeer.OnServerClientConnected += (clientId) => {
+            Debug.Log($"[Server] Player {clientId} connected.");
+        };
+        serverPeer.OnServerClientDisconnected += (clientId) => {
+            Debug.Log($"[Server] Player {clientId} disconected.");
+        };
+        
+        serverPeer.OnRequest += (clientId, msg) => {
+            serverPeer.ServerBroadcast(msg); 
+        };
+
+        int port = int.Parse(portInput.text);
+        await serverPeer.StartHostAsync(port);
+    }
+
+    async Task StartLocalClient() {
+        clientPeer = new SocketPeer();
+        int port = int.Parse(portInput.text);
+
+        clientPeer.OnClientConnected += () => { 
+            statusText.text = GetLocalIPAddress() + ':' + port; 
+            SetButtonsInteractable(true);
+        };
+        clientPeer.OnClientDisconnected += () => { 
+            statusText.text = "Server stopped"; 
+            SetButtonsInteractable(true); 
+            ShowMainMenu(); 
+        };
+
+        clientPeer.OnResponse += (msg) => HandleIncoming(msg);
+
+        await clientPeer.StartClientAsync("127.0.0.1", port);
     }
 
     async Task StartClient() {
         SetButtonsInteractable(false);
-        peer = new SocketPeer();
-        peer.OnConnected += () => { statusText.text = "Connected to host"; SetButtonsInteractable(true); ShowGame(); };
-        peer.OnDisconnected += () => { statusText.text = "Host stoped"; SetButtonsInteractable(true); ShowMainMenu(); };
-        peer.OnMessage += (msg) => HandleIncoming(msg);
-
         statusText.text = "Connecting...";
-        await peer.StartClientAsync(ipInput.text.Trim(), int.Parse(portInput.text));
+
+        clientPeer = new SocketPeer();
+
+        clientPeer.OnClientConnected += () => { 
+            statusText.text = "Connected to host"; 
+            SetButtonsInteractable(true); 
+            ShowGame(); 
+        };
+        clientPeer.OnClientDisconnected += () => { 
+            statusText.text = "Host stopped / Disconnected"; 
+            SetButtonsInteractable(true); 
+            ShowMainMenu(); 
+        };
+
+        clientPeer.OnResponse += (msg) => HandleIncoming(msg);
+
+        string ip = ipInput.text.Trim();
+        int port = int.Parse(portInput.text);
+        await clientPeer.StartClientAsync(ip, port);
     }
 
-    void HandleIncoming(string json) { // handle commands
+    void HandleIncoming(string json)  {
         statusText.text = "Msg: " + json;
-        try {
+        try  {
             var m = JsonUtility.FromJson<NetMsg>(json);
-            if (m.type == "move") // must be giga switch
+            
+            if (m.type == "move")  {
+                // Оскільки гравців тепер багато, в NetMsg добре було б додати поле ID гравця,
+                // щоб знати, який саме Rect рухати.
                 movableRect.anchoredPosition = new Vector2(m.x, m.y);
-        }
-        catch { }
+            }
+        } catch { }
     }
 
     public string GetLocalIPAddress() {
@@ -123,9 +167,10 @@ public class NetworkUIController : MonoBehaviour {
 
     void OnLocalMove() {
         var pos = RandomUINearScreen();
-        // movableRect.anchoredPosition = pos;
         var msg = JsonUtility.ToJson(new NetMsg { type = "move", x = pos[0], y = pos[1] });
-        peer?.Send(msg);
+
+        if (clientPeer != null)
+            clientPeer.ClientSend(msg);
     }
 
     int[] RandomUINearScreen() {
@@ -136,14 +181,17 @@ public class NetworkUIController : MonoBehaviour {
         return new int[2] {x, y};
     }
 
-    public async void OnQuitPressed() {
+    public void OnQuitPressed() {
         if(mainMenuPanel.activeSelf) {
             Debug.Log("bye");
             Application.Quit();
         } else {
             statusText.text = "Closing...";
-            if (peer != null)
-                await peer.CloseAsync();
+            if (serverPeer != null)
+                serverPeer.CloseAll();
+
+            if (clientPeer != null)
+                clientPeer.CloseAll();
         }
     }
 
