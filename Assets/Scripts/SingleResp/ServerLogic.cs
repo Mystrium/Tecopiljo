@@ -5,6 +5,8 @@ using Random = UnityEngine.Random;
 public class ServerLogic  {
     private readonly Action<byte[]> broadcastAction;
 
+    private LocalMap Map;
+
     public ServerLogic(Action<byte[]> broadcastAction) {
         this.broadcastAction = broadcastAction;
     }
@@ -23,17 +25,33 @@ public class ServerLogic  {
                         return;
                     }
 
-                    var msg = RandPosotionMsg(load);
+                    var msg = RandPositionMsg(load);
 
                     broadcastAction.Invoke(msg); // ---> to clients
                     break;
 
+                case NetType.Map:
+                    var mapIn = MapInitPayload.Unpack(NetMsg.GetPayload(data));
+
+                    Map = new LocalMap(mapIn.w, mapIn.h);
+
+                    Map.GenerateMap(mapIn.maxInd);
+
+                    Debug.Log("[Server] Clien wont map: {" + mapIn.w + ":" + mapIn.h + "} tiles = " + mapIn.maxInd);
+                    
+                    var mapPayload = new MapPayload { w = mapIn.w, h = mapIn.h, mapBytes = Map.CurrentMap };
+                    byte[] txBytes = MapPayload.Pack(mapPayload);
+                    byte[] txFinal = NetMsg.Pack(NetType.Map, txBytes);
+
+                    broadcastAction.Invoke(txFinal);
+                    break;
+
                 case NetType.Move:
-                    Debug.LogError("[Server] Clien has old APK");
+                    Debug.Log("[Server] Clien has old APK");
                     break;
 
                 default:
-                    Debug.LogError($"[Server] Clien wont to: {type}");
+                    Debug.LogWarning($"[Server] Clien wont to: {type}");
                     break;
             }
         } catch (Exception ex) {
@@ -43,7 +61,7 @@ public class ServerLogic  {
 
 
     // --- Helpers ---
-    byte[] RandPosotionMsg(CoordPayload message) {
+    byte[] RandPositionMsg(CoordPayload message) {
         int x = Random.Range(-message.x + 50, message.x - 50);
         int y = Random.Range(-message.y + 50, message.y - 50);
 

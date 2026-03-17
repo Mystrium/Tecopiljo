@@ -95,3 +95,30 @@ public struct MapPayload {
         }
     }
 }
+
+public struct MapInitPayload {
+    public int w;
+    public int h;
+    public byte maxInd;
+
+    public static byte[] Pack(MapInitPayload data) {
+        using (var ms = new MemoryStream())
+        using (var writer = new BinaryWriter(ms)) {
+            writer.Write(data.w);
+            writer.Write(data.h);
+            writer.Write(data.maxInd);
+            return ms.ToArray();
+        }
+    }
+
+    public static MapInitPayload Unpack(byte[] data) {
+        using (var ms = new MemoryStream(data))
+        using (var reader = new BinaryReader(ms)) {
+            return new MapInitPayload {
+                w = reader.ReadInt32(),
+                h = reader.ReadInt32(),
+                maxInd = reader.ReadByte()
+            };
+        }
+    }
+}

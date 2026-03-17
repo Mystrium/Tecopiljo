@@ -1,7 +1,5 @@
-using System.IO;
 using UnityEngine;
 using UnityEngine.Tilemaps;
-using System.Runtime.Serialization.Formatters.Binary;
 
 public class MapGenerator : MonoBehaviour {
     [Header("Tilemap / Tiles")]
@@ -28,6 +26,17 @@ public class MapGenerator : MonoBehaviour {
         foreach (int c in coef)
             sum += c;
 
+        for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
+                map[x, y] = (byte)Random.Range(0, sum);
+
+        var tx = MapPayload.Pack(new MapPayload { w = width, h = height, mapBytes = map });
+
+
+        var rx = MapPayload.Unpack(tx);
+
+        tilemap.ClearAllTiles();
+
         TileBase[] bePlased = new TileBase[sum];
         int k = 0;
         for(int i = 0; i < tiles.Length; i++)
@@ -35,18 +44,6 @@ public class MapGenerator : MonoBehaviour {
                 bePlased[k] = tiles[i];
                 k++;
             }
-
-        for (int x = 0; x < width; x++)
-            for (int y = 0; y < height; y++)
-                map[x, y] = (byte)Random.Range(0, sum);
-
-        Debug.Log("size of map = " + GetObjectSize(map) + " bytes");
-
-        var tx = MapPayload.Pack(new MapPayload { w = width, h = height, mapBytes = map });
-
-        var rx = MapPayload.Unpack(tx);
-
-        tilemap.ClearAllTiles();
 
         for (int x = 0; x < rx.w; x++) {
             for (int y = 0; y < rx.h; y++) {
@@ -58,14 +55,5 @@ public class MapGenerator : MonoBehaviour {
         }
 
         tilemap.RefreshAllTiles();
-    }
-
-    private int GetObjectSize(object TestObject) {
-        BinaryFormatter bf = new BinaryFormatter();
-        MemoryStream ms = new MemoryStream();
-        byte[] Array;
-        bf.Serialize(ms, TestObject);
-        Array = ms.ToArray();
-        return Array.Length;
     }
 }

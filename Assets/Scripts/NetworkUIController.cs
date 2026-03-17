@@ -17,12 +17,23 @@ public class NetworkUIController : MonoBehaviour {
     public RectTransform movableRect;
     public Button startPlay;
 
+    [Header("Innit UI")]
+    public InputField widthInput;
+    public InputField heightInput;
+    public Button innitGame;
+
     [Header("Panels")]
     public GameObject mainMenuPanel;
     public GameObject multiplayerPanel;
     public GameObject gamePanel;
+    public GameObject innitPanel;
+
     public Button singlePlayer;
     public Button multiPlayer;
+
+    [Header("Other")]
+    public GameObject Mapper;
+
 
     // TCP Sockets
     private SocketPeer serverPeer;
@@ -35,7 +46,8 @@ public class NetworkUIController : MonoBehaviour {
     void Start() {
         hostBtn.onClick.AddListener(() => _ = StartHost());
         connectBtn.onClick.AddListener(() => _ = StartClient());
-        startPlay.onClick.AddListener(ShowGame);
+        startPlay.onClick.AddListener(StartGame);
+        innitGame.onClick.AddListener(ShowInnit);
 
         singlePlayer.onClick.AddListener(() => _ = StartHost()); // illusion
         multiPlayer.onClick.AddListener(ShowMultiplayer);
@@ -51,9 +63,18 @@ public class NetworkUIController : MonoBehaviour {
         }
     }
 
-    public void ShowMainMenu() {    mainMenuPanel.SetActive(true);  multiplayerPanel.SetActive(false); gamePanel.SetActive(false); }
-    public void ShowMultiplayer() { mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(true);  gamePanel.SetActive(false); }
-    public void ShowGame() {        mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(false); gamePanel.SetActive(true);  }
+    public void ShowMainMenu() {    mainMenuPanel.SetActive(true);  multiplayerPanel.SetActive(false); gamePanel.SetActive(false); innitPanel.SetActive(false); }
+    public void ShowMultiplayer() { mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(true);  gamePanel.SetActive(false); innitPanel.SetActive(false); }
+    public void ShowInnit() {       mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(false); gamePanel.SetActive(false); innitPanel.SetActive(true);  }
+    public void ShowGame() {        mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(false); gamePanel.SetActive(false);  innitPanel.SetActive(false); }
+
+    void StartGame() {
+        int width = int.Parse(widthInput.text);
+        int height = int.Parse(heightInput.text);
+
+        clientLogic.RequestMap(width, height);
+        ShowGame();
+    }
 
     async Task StartHost() {
         SetButtonsInteractable(false);
@@ -117,7 +138,7 @@ public class NetworkUIController : MonoBehaviour {
     }
 
     private void SetupClientLogic() {
-        clientLogic = new ClientLogic(movableRect, clientPeer.ClientSend);
+        clientLogic = new ClientLogic(movableRect, clientPeer.ClientSend, Mapper.GetComponent<MapManager>());
         moveBtn.onClick.AddListener(clientLogic.IntentToMove);
         clientPeer.OnResponse += clientLogic.ProcessResponse;
     }
