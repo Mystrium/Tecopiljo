@@ -3,9 +3,9 @@ using System;
 
 public class ClientLogic {
     private readonly RectTransform movableRect;
-    private readonly Action<string> sendRequestAction;
+    private readonly Action<byte[]> sendRequestAction;
 
-    public ClientLogic(RectTransform movableRect, Action<string> sendRequestAction) {
+    public ClientLogic(RectTransform movableRect, Action<byte[]> sendRequestAction) {
         this.movableRect = movableRect;
         this.sendRequestAction = sendRequestAction;
     }
@@ -16,18 +16,23 @@ public class ClientLogic {
         // some simple logic
 
         var pos = ScreenSize();
-        var msg = JsonUtility.ToJson(new NetMsg { type = "size", x = pos[0], y = pos[1] });
+
+        byte[] coordBytes = CoordPayload.Pack(new CoordPayload { x = pos[0], y = pos[1] });
+
+        byte[] msg = NetMsg.Pack(NetType.Size, coordBytes);
 
         sendRequestAction?.Invoke(msg);
     }
 
-    public void ProcessResponse(string json) { // <--- from server
+    public void ProcessResponse(byte[] data) { // <--- from server
         // some UI logic
         try {
-            var m = JsonUtility.FromJson<NetMsg>(json);
-            
-            if (m.type == "move") {
-                movableRect.anchoredPosition = new Vector2(m.x, m.y);
+            NetType type = NetMsg.GetType(data);
+
+            if (type == NetType.Move) {
+                var pos = CoordPayload.Unpack(NetMsg.GetPayload(data));
+;
+                movableRect.anchoredPosition = new Vector2(pos.x, pos.y);
             }
         } 
         catch { }

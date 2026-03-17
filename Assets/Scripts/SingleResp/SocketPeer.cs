@@ -27,12 +27,12 @@ public class SocketPeer : IDisposable {
     public event Action OnHosted;
     public event Action<int> OnServerClientConnected;
     public event Action<int> OnServerClientDisconnected;
-    public event Action<int, string> OnRequest;
+    public event Action<int, byte[]> OnRequest;
 
     // === ПОДІЇ КЛІЄНТА ===
     public event Action OnClientConnected;
     public event Action OnClientDisconnected;
-    public event Action<string> OnResponse;
+    public event Action<byte[]> OnResponse;
 
     // ==========================================
     // СЕРВЕРНА ЧАСТИНА
@@ -77,13 +77,13 @@ public class SocketPeer : IDisposable {
         catch (Exception ex) { Debug.LogWarning("[SocketPeer] Accept loop error: " + ex.Message); }
     }
 
-    public void ServerBroadcast(string message) {
+    public void ServerBroadcast(byte[] message) {
         foreach (var client in connectedClients.Values) {
             client.Send(message);
         }
     }
 
-    public void ServerSendTo(int clientId, string message) {
+    public void ServerSendTo(int clientId, byte[] message) {
         if (connectedClients.TryGetValue(clientId, out var client)) {
             client.Send(message);
         }
@@ -115,7 +115,7 @@ public class SocketPeer : IDisposable {
         MainDispatcher.Enqueue(() => OnClientConnected?.Invoke());
     }
 
-    public void ClientSend(string message) {
+    public void ClientSend(byte[] message) {
         localClientPeer?.Send(message);
     }
 
@@ -148,13 +148,13 @@ public class SocketPeer : IDisposable {
         private readonly TcpClient client;
         private readonly NetworkStream stream;
         private readonly CancellationTokenSource peerCts;
-        private readonly ConcurrentQueue<string> sendQueue = new ConcurrentQueue<string>();
+        private readonly ConcurrentQueue<byte[]> sendQueue = new ConcurrentQueue<byte[]>();
         private readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0);
         
-        private readonly Action<string> onMessage;
+        private readonly Action<byte[]> onMessage;
         private readonly Action onDisconnected;
 
-        public ConnectedPeer(TcpClient client, int id, Action<string> onMessage, Action onDisconnected) {
+        public ConnectedPeer(TcpClient client, int id, Action<byte[]> onMessage, Action onDisconnected) {
             this.client = client;
             this.Id = id;
             this.stream = client.GetStream();
@@ -168,8 +168,8 @@ public class SocketPeer : IDisposable {
             _ = Task.Run(SendLoop, peerCts.Token);
         }
 
-        public void Send(string message) {
-            if (string.IsNullOrEmpty(message) || peerCts.IsCancellationRequested) return;
+        public void Send(byte[] message) {
+            if (message.Length <= 1 || peerCts.IsCancellationRequested) return;
             sendQueue.Enqueue(message);
             try { sendSignal.Release(); } catch { }
         }
@@ -189,8 +189,7 @@ public class SocketPeer : IDisposable {
                     read = await ReadExactlyAsync(buf, 0, len, peerCts.Token);
                     if (read == 0) break;
 
-                    string msg = Encoding.UTF8.GetString(buf);
-                    onMessage?.Invoke(msg);
+                    onMessage?.Invoke(buf);
                 }
             }
             catch (OperationCanceledException) { }
@@ -203,8 +202,7 @@ public class SocketPeer : IDisposable {
                 while (!peerCts.IsCancellationRequested && client.Connected) {
                     await sendSignal.WaitAsync(100, peerCts.Token);
 
-                    while (sendQueue.TryDequeue(out var msg)) {
-                        var bytes = Encoding.UTF8.GetBytes(msg);
+                    while (sendQueue.TryDequeue(out var bytes)) {
                         int netlen = IPAddress.HostToNetworkOrder(bytes.Length);
                         var lenBytes = BitConverter.GetBytes(netlen);
 

@@ -267,7 +267,7 @@ Grid:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 300415017}
   m_Enabled: 1
-  m_CellSize: {x: 2.3, y: 2.5, z: 1}
+  m_CellSize: {x: 2.2, y: 2.5, z: 1}
   m_CellGap: {x: 0, y: 0, z: 0}
   m_CellLayout: 1
   m_CellSwizzle: 2
@@ -392,7 +392,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 752c9e64d535da74280abb2bfb0d0708, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  mainCamera: {fileID: 598607718}
 --- !u!1 &2099811278
 GameObject:
   m_ObjectHideFlags: 0

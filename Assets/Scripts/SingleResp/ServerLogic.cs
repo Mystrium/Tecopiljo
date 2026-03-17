@@ -3,34 +3,37 @@ using System;
 using Random = UnityEngine.Random;
 
 public class ServerLogic  {
-    private readonly Action<string> broadcastAction;
+    private readonly Action<byte[]> broadcastAction;
 
-    public ServerLogic(Action<string> broadcastAction) {
+    public ServerLogic(Action<byte[]> broadcastAction) {
         this.broadcastAction = broadcastAction;
     }
 
-    public void ProcessRequest(int clientId, string json) { // <--- from client
+    public void ProcessRequest(int clientId, byte[] data) { // <--- from client
         try {
-            var m = JsonUtility.FromJson<NetMsg>(json);
 
-            switch (m.type) {
-                case "size":
-                    if (m.x > 2000 || m.x < -2000) {
+            NetType type = NetMsg.GetType(data);
+
+            switch (type) {
+                case NetType.Size:
+                    var load = CoordPayload.Unpack(NetMsg.GetPayload(data));
+
+                    if (load.x > 2000 || load.x < -2000) {
                         Debug.LogWarning($"[Server] Чітерство від {clientId}! Блокуємо рух.");
                         return;
                     }
 
-                    var msg = RandPosotionMsg(m);
+                    var msg = RandPosotionMsg(load);
 
                     broadcastAction.Invoke(msg); // ---> to clients
                     break;
 
-                case "move":
+                case NetType.Move:
                     Debug.LogError("[Server] Clien has old APK");
                     break;
 
                 default:
-                    Debug.LogError($"[Server] Clien wont to: {m.type}");
+                    Debug.LogError($"[Server] Clien wont to: {type}");
                     break;
             }
         } catch (Exception ex) {
@@ -40,10 +43,12 @@ public class ServerLogic  {
 
 
     // --- Helpers ---
-    string RandPosotionMsg(NetMsg message) {
+    byte[] RandPosotionMsg(CoordPayload message) {
         int x = Random.Range(-message.x + 50, message.x - 50);
         int y = Random.Range(-message.y + 50, message.y - 50);
 
-        return JsonUtility.ToJson(new NetMsg { type = "move", x = x, y = y });
+        byte[] moveBytes = CoordPayload.Pack(new CoordPayload { x = x, y = y });
+
+        return NetMsg.Pack(NetType.Move, moveBytes);
     }
 }
