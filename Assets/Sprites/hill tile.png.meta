@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: d622145ec79068b4985e72306f27436c
+guid: 0ea385eb9ce5de24d83b0309af5541c6
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -2209186012172167823
-    second: hill tile_0
+      213: 8955225750991086135
+    second: hill tile 1_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,13 +113,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: hill tile_0
+      name: hill tile 1_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 256
-        height: 222
+        width: 222
+        height: 256
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 17557b5d6056751e0800000000000000
-      internalID: -2209186012172167823
+      spriteID: 732214baf5a574c70800000000000000
+      internalID: 8955225750991086135
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      hill tile_0: -2209186012172167823
+      hill tile 1_0: 8955225750991086135
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

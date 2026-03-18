@@ -42,8 +42,11 @@ public class NetworkUIController : MonoBehaviour {
     // Backend logic
     private ServerLogic serverLogic;
     private ClientLogic clientLogic;
+    private MapManager MapScript;
 
     void Start() {
+        MapScript = Mapper.GetComponent<MapManager>();
+
         hostBtn.onClick.AddListener(() => _ = StartHost());
         connectBtn.onClick.AddListener(() => _ = StartClient());
         startPlay.onClick.AddListener(StartGame);
@@ -61,6 +64,8 @@ public class NetworkUIController : MonoBehaviour {
             OnQuitPressed();
             ShowMainMenu();
         }
+
+        MapScript.GetClickedTile();
     }
 
     public void ShowMainMenu() {    mainMenuPanel.SetActive(true);  multiplayerPanel.SetActive(false); gamePanel.SetActive(false); innitPanel.SetActive(false); }
@@ -138,7 +143,7 @@ public class NetworkUIController : MonoBehaviour {
     }
 
     private void SetupClientLogic() {
-        clientLogic = new ClientLogic(movableRect, clientPeer.ClientSend, Mapper.GetComponent<MapManager>());
+        clientLogic = new ClientLogic(movableRect, clientPeer.ClientSend, MapScript);
         moveBtn.onClick.AddListener(clientLogic.IntentToMove);
         clientPeer.OnResponse += clientLogic.ProcessResponse;
     }

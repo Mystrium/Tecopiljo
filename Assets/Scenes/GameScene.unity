@@ -270,7 +270,7 @@ Grid:
   m_CellSize: {x: 2.2, y: 2.5, z: 1}
   m_CellGap: {x: 0, y: 0, z: 0}
   m_CellLayout: 1
-  m_CellSwizzle: 2
+  m_CellSwizzle: 0
 --- !u!4 &300415019
 Transform:
   m_ObjectHideFlags: 0
@@ -427,8 +427,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: b00ba82c85c077f449a667a555d6e5d9, type: 2}
   - {fileID: 11400000, guid: 692f29cfafc8ba24fa1ef8234a6adce6, type: 2}
   coef: 030000000100000001000000
-  width: 100
-  height: 100
+  width: 10
+  height: 10
   offset: {x: -5, y: -5}
 --- !u!4 &2099811280
 Transform:

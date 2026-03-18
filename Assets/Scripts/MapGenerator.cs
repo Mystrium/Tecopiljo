@@ -47,7 +47,7 @@ public class MapGenerator : MonoBehaviour {
 
         for (int x = 0; x < rx.w; x++) {
             for (int y = 0; y < rx.h; y++) {
-                Vector3Int pos = new Vector3Int(x + offset.x, y + offset.y, 0);
+                Vector3Int pos = new Vector3Int(y + offset.y - x / 2, x + offset.x, 0);
                 var ind = rx.mapBytes[x, y];
                 var test = bePlased[ind];
                 tilemap.SetTile(pos, test);
