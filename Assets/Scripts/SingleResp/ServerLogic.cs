@@ -4,8 +4,14 @@ using Random = UnityEngine.Random;
 
 public class ServerLogic  {
     private readonly Action<byte[]> broadcastAction;
+    private LocalMap map;
 
-    private LocalMap Map;
+    // TODO: This probably should be in MapInitPayload
+    public readonly int[] landTypeCoef = new int[(int)TileLandType.MAX]{
+        1, // Water
+        5, // Hill
+        2, // Desert
+    };
 
     public ServerLogic(Action<byte[]> broadcastAction) {
         this.broadcastAction = broadcastAction;
@@ -33,13 +39,12 @@ public class ServerLogic  {
                 case NetType.Map:
                     var mapIn = MapInitPayload.Unpack(NetMsg.GetPayload(data));
 
-                    Map = new LocalMap(mapIn.w, mapIn.h);
+                    map = new LocalMap(mapIn.w, mapIn.h);
+                    MapGenerator.Generate(map, landTypeCoef);
 
-                    Map.GenerateMap(mapIn.maxInd);
+                    Debug.Log("[Server] Clien wont map: {" + mapIn.w + ":" + mapIn.h + "}");
 
-                    Debug.Log("[Server] Clien wont map: {" + mapIn.w + ":" + mapIn.h + "} tiles = " + mapIn.maxInd);
-                    
-                    var mapPayload = new MapPayload { w = mapIn.w, h = mapIn.h, mapBytes = Map.CurrentMap };
+                    var mapPayload = new MapPayload { map = map };
                     byte[] txBytes = MapPayload.Pack(mapPayload);
                     byte[] txFinal = NetMsg.Pack(NetType.Map, txBytes);
 

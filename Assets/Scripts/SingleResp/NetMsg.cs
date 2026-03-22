@@ -43,70 +43,73 @@ public struct CoordPayload {
     public static byte[] Pack(CoordPayload coords) {
         using (MemoryStream ms = new MemoryStream())
         using (BinaryWriter writer = new BinaryWriter(ms)) {
-            writer.Write(coords.x);  
+            writer.Write(coords.x);
             writer.Write(coords.y);
             return ms.ToArray();
         }
     }
 
-    public static CoordPayload Unpack(byte[] payloadData) { 
+    public static CoordPayload Unpack(byte[] payloadData) {
         using (MemoryStream ms = new MemoryStream(payloadData))
         using (BinaryReader reader = new BinaryReader(ms)) {
-            return new CoordPayload { 
-                x = reader.ReadInt32(), 
-                y = reader.ReadInt32() 
+            return new CoordPayload {
+                x = reader.ReadInt32(),
+                y = reader.ReadInt32()
             };
         }
     }
 }
 
 public struct MapPayload {
-    public int w;
-    public int h;
-    public byte[,] mapBytes; 
+    public LocalMap map;
 
-    public static byte[] Pack(MapPayload map) {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms)) {
-            writer.Write(map.w);  
-            writer.Write(map.h); 
-            
-            for (int x = 0; x < map.w; x++)
-                for (int y = 0; y < map.h; y++)
-                    writer.Write(map.mapBytes[x, y]);
+    public static byte[] Pack(MapPayload p) {
+        using (MemoryStream ms = new MemoryStream()) {
+            using (BinaryWriter writer = new BinaryWriter(ms)) {
+                writer.Write(p.map.w);
+                writer.Write(p.map.h);
 
+                for (int x = 0; x < p.map.w; x++) {
+                    for (int y = 0; y < p.map.h; y++) {
+                        writer.Write((byte)p.map.tileArr[x, y].landType);
+                    }
+                }
+            }
             return ms.ToArray();
         }
     }
 
     public static MapPayload Unpack(byte[] payloadData) {
-        using (MemoryStream ms = new MemoryStream(payloadData))
-        using (BinaryReader reader = new BinaryReader(ms)) {
-            int w = reader.ReadInt32();
-            int h = reader.ReadInt32();
+        MapPayload result = new MapPayload();
 
-            byte[,] receivedMap = new byte[w, h];
+        using (MemoryStream ms = new MemoryStream(payloadData)) {
+            using (BinaryReader reader = new BinaryReader(ms)) {
+                int w = reader.ReadInt32();
+                int h = reader.ReadInt32();
 
-            for (int x = 0; x < w; x++)
-                for (int y = 0; y < h; y++)
-                    receivedMap[x, y] = reader.ReadByte();
+                result.map = new LocalMap(w, h);
 
-            return new MapPayload{ w = w, h = h, mapBytes = receivedMap };
+                for (int x = 0; x < w; x++) {
+                    for (int y = 0; y < h; y++) {
+                        result.map.tileArr[x, y].landType = (TileLandType)reader.ReadByte();
+                    }
+                }
+            }
         }
+
+        return result;
     }
 }
 
 public struct MapInitPayload {
     public int w;
     public int h;
-    public byte maxInd;
 
     public static byte[] Pack(MapInitPayload data) {
         using (var ms = new MemoryStream())
         using (var writer = new BinaryWriter(ms)) {
             writer.Write(data.w);
             writer.Write(data.h);
-            writer.Write(data.maxInd);
             return ms.ToArray();
         }
     }
@@ -117,7 +120,6 @@ public struct MapInitPayload {
             return new MapInitPayload {
                 w = reader.ReadInt32(),
                 h = reader.ReadInt32(),
-                maxInd = reader.ReadByte()
             };
         }
     }

@@ -1,17 +1,23 @@
+public enum TileLandType : byte {
+    MIN = 0,
+    WATER = 0,
+    HILL = 1,
+    DESERT = 2,
+    MAX,
+}
+
+public struct TileData {
+    public TileLandType landType;
+}
+
 public class LocalMap {
-    public byte[,] CurrentMap { get; private set; } 
-    public int MapWidth { get; private set; }
-    public int MapHeight { get; private set; }
+    public TileData[,] tileArr;
+    public int w;
+    public int h;
 
-    public LocalMap(int w, int h) {
-        MapWidth = w;
-        MapHeight = h;
-        CurrentMap = new byte[w, h];
-    }
-
-    public void GenerateMap(byte maxInd) {
-        for (int x = 0; x < MapWidth; x++)
-            for (int y = 0; y < MapHeight; y++)
-                CurrentMap[x, y] = (byte)UnityEngine.Random.Range(0, maxInd);
+    public LocalMap(int width, int height) {
+        w = width;
+        h = height;
+        tileArr = new TileData[w, h];
     }
 }

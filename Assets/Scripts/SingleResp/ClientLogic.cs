@@ -26,7 +26,7 @@ public class ClientLogic {
     }
 
     public void RequestMap(int w, int h) {
-        byte[] coordBytes = MapInitPayload.Pack(new MapInitPayload { w = w, h = h, maxInd = mapRenderer.TotalCoefSum });
+        byte[] coordBytes = MapInitPayload.Pack(new MapInitPayload { w = w, h = h });
         byte[] msg = NetMsg.Pack(NetType.Map, coordBytes);
 
         sendRequestAction?.Invoke(msg);

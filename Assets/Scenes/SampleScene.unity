@@ -1316,7 +1316,7 @@ GameObject:
   - component: {fileID: 563479254}
   - component: {fileID: 563479253}
   m_Layer: 0
-  m_Name: TileMaper
+  m_Name: TileMapper
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1335,12 +1335,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   mainCamera: {fileID: 519420031}
-  tilemap: {fileID: 1237914371}
-  tiles:
+  tilePalette:
+  - {fileID: 11400000, guid: b00ba82c85c077f449a667a555d6e5d9, type: 2}
   - {fileID: 11400000, guid: 5c6da1f82e7ebd34884124a5e2fe9831, type: 2}
   - {fileID: 11400000, guid: 692f29cfafc8ba24fa1ef8234a6adce6, type: 2}
-  - {fileID: 11400000, guid: b00ba82c85c077f449a667a555d6e5d9, type: 2}
-  coef: 050000000200000003000000
+  tilemap: {fileID: 1237914371}
   offset: {x: -5, y: -5}
 --- !u!4 &563479254
 Transform:
