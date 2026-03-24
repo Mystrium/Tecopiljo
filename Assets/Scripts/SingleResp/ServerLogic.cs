@@ -19,7 +19,6 @@ public class ServerLogic  {
 
     public void ProcessRequest(int clientId, byte[] data) { // <--- from client
         try {
-
             NetType type = NetMsg.GetType(data);
 
             switch (type) {

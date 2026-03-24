@@ -66,14 +66,7 @@ public struct MapPayload {
     public static byte[] Pack(MapPayload p) {
         using (MemoryStream ms = new MemoryStream()) {
             using (BinaryWriter writer = new BinaryWriter(ms)) {
-                writer.Write(p.map.w);
-                writer.Write(p.map.h);
-
-                for (int x = 0; x < p.map.w; x++) {
-                    for (int y = 0; y < p.map.h; y++) {
-                        writer.Write((byte)p.map.tileArr[x, y].landType);
-                    }
-                }
+                LocalMap.Pack(writer, p.map);
             }
             return ms.ToArray();
         }
@@ -84,16 +77,7 @@ public struct MapPayload {
 
         using (MemoryStream ms = new MemoryStream(payloadData)) {
             using (BinaryReader reader = new BinaryReader(ms)) {
-                int w = reader.ReadInt32();
-                int h = reader.ReadInt32();
-
-                result.map = new LocalMap(w, h);
-
-                for (int x = 0; x < w; x++) {
-                    for (int y = 0; y < h; y++) {
-                        result.map.tileArr[x, y].landType = (TileLandType)reader.ReadByte();
-                    }
-                }
+                result.map = LocalMap.Unpack(reader);
             }
         }
 
@@ -117,9 +101,12 @@ public struct MapInitPayload {
     public static MapInitPayload Unpack(byte[] data) {
         using (var ms = new MemoryStream(data))
         using (var reader = new BinaryReader(ms)) {
+            int w = reader.ReadInt32();
+            int h = reader.ReadInt32();
+
             return new MapInitPayload {
-                w = reader.ReadInt32(),
-                h = reader.ReadInt32(),
+                w = w,
+                h = h,
             };
         }
     }
