@@ -3,7 +3,6 @@ using System;
 using Random = UnityEngine.Random;
 
 public class ServerLogic  {
-    private readonly Action<byte[]> broadcastAction;
     private LocalMap map;
 
     // TODO: This probably should be in MapInitPayload
@@ -13,64 +12,48 @@ public class ServerLogic  {
         2, // Desert
     };
 
-    public ServerLogic(Action<byte[]> broadcastAction) {
-        this.broadcastAction = broadcastAction;
-    }
+    public NetMsg ProcessRequest(ServerConnectionMsg cmsg) { // <--- from client
+        NetMsg result = new NetMsg();
+        result.header.type = NetType.Error;
+        result.payload = new byte[0]; // This is stupid.
 
-    public void ProcessRequest(int clientId, byte[] data) { // <--- from client
         try {
-            NetType type = NetMsg.GetType(data);
+            switch (cmsg.msg.header.type) {
+                // case NetType.Size:
+                //     var load = CoordPayload.Unpack(NetMsg.GetPayload(data));
+                //
+                //     if (load.x > 2000 || load.x < -2000) {
+                //         Debug.LogWarning($"[Server] Чітерство від {clientId}! Блокуємо рух.");
+                //         return;
+                //     }
+                //
+                //     var cmsg.msg = RandPositionMsg(load);
+                //
+                //     broadcastAction.Invoke(cmsg.msg); // ---> to clients
+                //     break;
 
-            switch (type) {
-                case NetType.Size:
-                    var load = CoordPayload.Unpack(NetMsg.GetPayload(data));
+                case NetType.MapInit:
+                    var mapInit = MapInitPayload.Unpack(cmsg.msg.payload);
 
-                    if (load.x > 2000 || load.x < -2000) {
-                        Debug.LogWarning($"[Server] Чітерство від {clientId}! Блокуємо рух.");
-                        return;
-                    }
-
-                    var msg = RandPositionMsg(load);
-
-                    broadcastAction.Invoke(msg); // ---> to clients
-                    break;
-
-                case NetType.Map:
-                    var mapIn = MapInitPayload.Unpack(NetMsg.GetPayload(data));
-
-                    map = new LocalMap(mapIn.w, mapIn.h);
+                    map = new LocalMap(mapInit.w, mapInit.h);
                     MapGenerator.Generate(map, landTypeCoef);
 
-                    Debug.Log("[Server] Clien wont map: {" + mapIn.w + ":" + mapIn.h + "}");
+                    Debug.Log("[Server] Generating map: (" + mapInit.w + ":" + mapInit.h + ")");
 
                     var mapPayload = new MapPayload { map = map };
-                    byte[] txBytes = MapPayload.Pack(mapPayload);
-                    byte[] txFinal = NetMsg.Pack(NetType.Map, txBytes);
-
-                    broadcastAction.Invoke(txFinal);
-                    break;
-
-                case NetType.Move:
-                    Debug.Log("[Server] Clien has old APK");
+                    result.header.type = NetType.Map;
+                    result.payload = MapPayload.Pack(mapPayload);
                     break;
 
                 default:
-                    Debug.LogWarning($"[Server] Clien wont to: {type}");
+                    Debug.LogWarning($"[Server] Unknown message type: {cmsg.msg.header.type}");
                     break;
             }
         } catch (Exception ex) {
             Debug.LogError($"[Server] Помилка обробки: {ex.Message}");
         }
-    }
 
-
-    // --- Helpers ---
-    byte[] RandPositionMsg(CoordPayload message) {
-        int x = Random.Range(-message.x + 50, message.x - 50);
-        int y = Random.Range(-message.y + 50, message.y - 50);
-
-        byte[] moveBytes = CoordPayload.Pack(new CoordPayload { x = x, y = y });
-
-        return NetMsg.Pack(NetType.Move, moveBytes);
+        result.header.size = (uint)result.payload.Length;
+        return result;
     }
 }

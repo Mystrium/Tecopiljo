@@ -1,62 +1,72 @@
 using System.IO;
 using System;
 
-public static class NetMsg {
-    public static byte[] Pack(NetType type, byte[] payloadData) {
-        if (payloadData == null) payloadData = new byte[0];
-
-        byte[] finalData = new byte[payloadData.Length + 1];
-
-        finalData[0] = (byte)type;
-
-        Buffer.BlockCopy(payloadData, 0, finalData, 1, payloadData.Length);
-
-        return finalData;
-    }
-
-    public static NetType GetType(byte[] data) {
-        return (NetType)data[0];
-    }
-
-    public static byte[] GetPayload(byte[] data) {
-        if (data.Length <= 1) return new byte[0];
-
-        byte[] payload = new byte[data.Length - 1];
-        Buffer.BlockCopy(data, 1, payload, 0, payload.Length);
-        return payload;
-    }
-}
-
-public enum NetType : byte { // --- messages types ---
+// These probably should be split for client and server...
+public enum NetType : byte {
     PlayerJoined = 1,
-    Move = 2,
-    Size = 3,
-    Map = 4,
+    PlayerDisconnected = 2,
+    // other player related messages
+    MapInit = 10,
+    Map = 11,
+    // other map related messages
+    Error = 255,
 }
 
+public struct NetMsgHeader {
+    public uint size;
+    public NetType type;
 
-// --- messages structs ---
-public struct CoordPayload {
-    public int x;
-    public int y;
-
-    public static byte[] Pack(CoordPayload coords) {
+    public static byte[] Pack(NetMsgHeader head) {
         using (MemoryStream ms = new MemoryStream())
         using (BinaryWriter writer = new BinaryWriter(ms)) {
-            writer.Write(coords.x);
-            writer.Write(coords.y);
+            writer.Write(head.size);
+            writer.Write((int)head.type);
             return ms.ToArray();
         }
     }
 
-    public static CoordPayload Unpack(byte[] payloadData) {
-        using (MemoryStream ms = new MemoryStream(payloadData))
+    public static NetMsgHeader Unpack(BinaryReader reader) {
+        NetMsgHeader result = new NetMsgHeader();
+
+        result.size = reader.ReadUInt32();
+        result.type = (NetType)reader.ReadInt32();
+
+        return result;
+    }
+
+    public static NetMsgHeader Unpack(byte[] data) {
+        using (MemoryStream ms = new MemoryStream(data))
         using (BinaryReader reader = new BinaryReader(ms)) {
-            return new CoordPayload {
-                x = reader.ReadInt32(),
-                y = reader.ReadInt32()
-            };
+            return Unpack(reader);
         }
+    }
+}
+
+// TODO: Somehow turn this into a union or smth similar
+public struct NetMsg {
+    public NetMsgHeader header;
+    public byte[] payload;
+
+    public static byte[] Pack(NetMsg msg) {
+        using (MemoryStream ms = new MemoryStream())
+        using (BinaryWriter writer = new BinaryWriter(ms)) {
+            writer.Write(NetMsgHeader.Pack(msg.header));
+            writer.Write(msg.payload);
+            return ms.ToArray();
+        }
+    }
+
+    public static NetMsg Unpack(byte[] data) {
+        NetMsg result = new NetMsg();
+
+        using (MemoryStream ms = new MemoryStream(data)) {
+            using (BinaryReader reader = new BinaryReader(ms)) {
+                result.header = NetMsgHeader.Unpack(reader);
+                result.payload = reader.ReadBytes((int)result.header.size);
+            }
+        }
+
+        return result;
     }
 }
 

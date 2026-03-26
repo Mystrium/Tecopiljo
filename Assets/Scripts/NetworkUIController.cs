@@ -34,25 +34,23 @@ public class NetworkUIController : MonoBehaviour {
     [Header("Other")]
     public GameObject Mapper;
 
-
     // TCP Sockets
-    private SocketPeer serverPeer;
-    private SocketPeer clientPeer;
+    private Server server;
+    private Client client;
 
     // Backend logic
     private ServerLogic serverLogic;
-    private ClientLogic clientLogic;
     private MapManager MapScript;
 
     void Start() {
         MapScript = Mapper.GetComponent<MapManager>();
 
-        hostBtn.onClick.AddListener(() => _ = StartHost());
+        hostBtn.onClick.AddListener(() => StartHost());
         connectBtn.onClick.AddListener(() => _ = StartClient());
         startPlay.onClick.AddListener(StartGame);
         innitGame.onClick.AddListener(ShowInnit);
 
-        singlePlayer.onClick.AddListener(() => _ = StartHost()); // illusion
+        singlePlayer.onClick.AddListener(() => StartHost()); // illusion
         multiPlayer.onClick.AddListener(ShowMultiplayer);
 
         ShowMainMenu();
@@ -77,77 +75,59 @@ public class NetworkUIController : MonoBehaviour {
         int width = int.Parse(widthInput.text);
         int height = int.Parse(heightInput.text);
 
-        clientLogic.RequestMap(width, height);
+        client.RequestMap(width, height);
         ShowGame();
     }
 
-    async Task StartHost() {
+    async void StartHost() {
         SetButtonsInteractable(false);
         statusText.text = "Starting host on " + GetLocalIPAddress() + ":" + portInput.text;
 
-        serverPeer = new SocketPeer();
-
-        serverLogic = new ServerLogic(serverPeer.ServerBroadcast);
-
-        serverPeer.OnHosted += () => _ = StartLocalClient();
-        serverPeer.OnServerClientConnected += (clientId) => Debug.Log($"[Server] Player {clientId} connected.");
-        serverPeer.OnServerClientDisconnected += (clientId) => Debug.Log($"[Server] Player {clientId} disconected.");
-
-        serverPeer.OnRequest += serverLogic.ProcessRequest;
+        server = new Server();
 
         int port = int.Parse(portInput.text);
-        await serverPeer.StartHostAsync(port);
+        server.start(port);
+        await StartLocalClient();
     }
 
     async Task StartLocalClient() {
-        clientPeer = new SocketPeer();
+        client = new Client(movableRect, MapScript);
         int port = int.Parse(portInput.text);
 
-        SetupClientLogic();
-
-        clientPeer.OnClientConnected += () => { 
-            statusText.text = GetLocalIPAddress() + ':' + port; 
+        client.OnClientConnected += () => {
+            statusText.text = GetLocalIPAddress() + ':' + port;
             SetButtonsInteractable(true);
         };
-        clientPeer.OnClientDisconnected += () => { 
-            statusText.text = "Server stopped"; 
-            SetButtonsInteractable(true); 
-            ShowMainMenu(); 
+        client.OnClientDisconnected += () => {
+            statusText.text = "Server stopped";
+            SetButtonsInteractable(true);
+            ShowMainMenu();
         };
 
-        await clientPeer.StartClientAsync("127.0.0.1", port);
+        await client.StartClientAsync("127.0.0.1", port);
     }
 
     async Task StartClient() {
         SetButtonsInteractable(false);
         statusText.text = "Connecting...";
 
-        clientPeer = new SocketPeer();
+        client = new Client(movableRect, MapScript);
 
-        SetupClientLogic();
-
-        clientPeer.OnClientConnected += () => { 
-            statusText.text = "Connected to host"; 
-            SetButtonsInteractable(true); 
-            ShowGame(); 
+        client.OnClientConnected += () => {
+            statusText.text = "Connected to host";
+            SetButtonsInteractable(true);
+            ShowGame();
         };
-        clientPeer.OnClientDisconnected += () => { 
-            statusText.text = "Host stopped / Disconnected"; 
-            SetButtonsInteractable(true); 
-            ShowMainMenu(); 
+        client.OnClientDisconnected += () => {
+            statusText.text = "Host stopped / Disconnected";
+            SetButtonsInteractable(true);
+            ShowMainMenu();
         };
 
         string ip = ipInput.text.Trim();
         int port = int.Parse(portInput.text);
-        await clientPeer.StartClientAsync(ip, port);
+        await client.StartClientAsync(ip, port);
     }
-
-    private void SetupClientLogic() {
-        clientLogic = new ClientLogic(movableRect, clientPeer.ClientSend, MapScript);
-        moveBtn.onClick.AddListener(clientLogic.IntentToMove);
-        clientPeer.OnResponse += clientLogic.ProcessResponse;
-    }
-
 
     // --- Helpers ---
     public string GetLocalIPAddress() {
@@ -170,11 +150,11 @@ public class NetworkUIController : MonoBehaviour {
             Application.Quit();
         } else {
             statusText.text = "Closing...";
-            if (serverPeer != null)
-                serverPeer.CloseAll();
+            if (server != null)
+                server.Dispose();
 
-            if (clientPeer != null)
-                clientPeer.CloseAll();
+            if (client != null)
+                client.Dispose();
         }
     }
 
