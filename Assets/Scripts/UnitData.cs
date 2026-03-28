@@ -36,11 +36,13 @@ public class UnitData : MonoBehaviour {
 
     public static UnitData? Unpack(BinaryReader r) {
         bool isNull = r.ReadBoolean();
-        UnitData result = new UnitData();
 
         if (isNull) {
             return null;
         }
+
+        // TODO: This somehow needs to be done differently.
+        UnitData result = new UnitData();
 
         result.unitName = r.ReadString();
         result.baseMaxHealth = r.ReadInt32();
