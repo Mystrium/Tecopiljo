@@ -1,6 +1,7 @@
 using UnityEngine;
-using System;
 using Random = UnityEngine.Random;
+using System;
+using System.Collections;
 
 public class ServerLogic  {
     private LocalMap map;
@@ -12,7 +13,9 @@ public class ServerLogic  {
         2, // Desert
     };
 
-    public NetMsg ProcessRequest(ServerConnectionMsg cmsg) { // <--- from client
+    public NetMsg ProcessRequest(
+            ServerConnectionMsg cmsg,
+            IEnumerable playerIds) {
         NetMsg result = new NetMsg();
         result.header.type = NetType.Error;
         result.payload = new byte[0]; // This is stupid.
@@ -36,7 +39,7 @@ public class ServerLogic  {
                     var mapInit = MapInitPayload.Unpack(cmsg.msg.payload);
 
                     map = new LocalMap(mapInit.w, mapInit.h);
-                    MapGenerator.Generate(map, landTypeCoef);
+                    MapGenerator.Generate(map, landTypeCoef, playerIds);
 
                     Debug.Log("[Server] Generating map: (" + mapInit.w + ":" + mapInit.h + ")");
 

@@ -117,7 +117,7 @@ public class Server : IDisposable{
     public void processMsg(ServerConnectionMsg cmsg) {
         Debug.Log($"[Server] Processing message: connId = {cmsg.connId}, type = {cmsg.msg.header.type}");
         // Probably here I also need to sometimes send data only to responding client.
-        broadcastMsg(logic.ProcessRequest(cmsg));
+        broadcastMsg(logic.ProcessRequest(cmsg, connDict.Keys));
     }
 
     public void processLoop(CancellationToken token) {

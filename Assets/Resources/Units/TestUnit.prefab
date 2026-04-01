@@ -100,10 +100,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c4b4f39a216cd4946b52616e5a91f381, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  unitName: Circle
+  type: 1
+  unitName: Test Unit
   baseMaxHealth: 10
   baseAttack: 2
   baseMobility: 5
-  playerIdx: 0
-  health: 10
-  curMobility: 5
