@@ -91,7 +91,7 @@ public class NetworkUIController : MonoBehaviour {
     }
 
     async Task StartLocalClient() {
-        client = new Client(movableRect, MapScript);
+        client = new Client(MapScript);
         int port = int.Parse(portInput.text);
 
         client.OnClientConnected += () => {
@@ -111,7 +111,7 @@ public class NetworkUIController : MonoBehaviour {
         SetButtonsInteractable(false);
         statusText.text = "Connecting...";
 
-        client = new Client(movableRect, MapScript);
+        client = new Client(MapScript);
 
         client.OnClientConnected += () => {
             statusText.text = "Connected to host";

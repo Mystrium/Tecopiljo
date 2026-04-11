@@ -3,10 +3,10 @@ using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 using System.Threading;
-using System.Text;
 using UnityEngine;
-using System.Net;
 using System;
+using Unity.Mathematics;
+using System.Data.Common;
 
 public class Client : IDisposable {
     private CancellationTokenSource mainCts;
@@ -166,17 +166,18 @@ public class Client : IDisposable {
     // ==========================================
     // LOGIC
     // ==========================================
-    private readonly RectTransform movableRect;
+    private int playerId = -1;
     private MapManager mapRenderer;
 
-    public Client(RectTransform movableRect, MapManager mapper) {
+    public Client(MapManager mapper) {
         mapRenderer = mapper;
-        this.movableRect = movableRect;
+        mapRenderer.OnMoveIntent += RequestMoveUnit;
     }
 
     public void RequestMap(int w, int h) {
-        NetMsg msg = new NetMsg();
-        msg.payload = MapInitPayload.Pack(new MapInitPayload { w = w, h = h });
+        NetMsg msg = new NetMsg {
+            payload = MapInitPayload.Pack(new MapInitPayload { w = w, h = h })
+        };
         msg.header = new NetMsgHeader {
             type = NetType.MapInit,
             size = (uint)msg.payload.Length,
@@ -187,15 +188,76 @@ public class Client : IDisposable {
         ClientSend(NetMsg.Pack(msg));
     }
 
+    private void RequestUnit(int2 pos, UnitType type) {
+        Debug.Log("request innit unit");
+        NetMsg msg = new NetMsg {
+            payload = UnitPayload.Pack(new UnitPayload { type = type, x = pos.x, y = pos.y, playerIdx = playerId })
+        };
+        msg.header = new NetMsgHeader {
+            type = NetType.InnitUnit,
+            size = (uint)msg.payload.Length,
+        };
+
+        Debug.Log($"[Client] size = {msg.header.size}, type = {msg.header.type}");
+
+        ClientSend(NetMsg.Pack(msg));
+    }
+
+    private void RequestMoveUnit(int unitId, Vector2Int targetPos, int player) {
+        if(player != playerId) return; // yea, stupid
+
+        NetMsg msg = new NetMsg {
+            payload = MoveUnitPayload.Pack(new MoveUnitPayload { 
+                unitId = unitId, 
+                x = targetPos.x, 
+                y = targetPos.y 
+            })
+        };
+        msg.header = new NetMsgHeader {
+            type = NetType.MoveUnit,
+            size = (uint)msg.payload.Length,
+        };
+
+        Debug.Log($"[Client] Sending move intent for unit {unitId} to [{targetPos.x}, {targetPos.y}]");
+        ClientSend(NetMsg.Pack(msg));
+    }
+
     public void ProcessResponse(NetMsg msg) { // <--- from server
         // some UI logic
         try {
             switch (msg.header.type) {
+                case NetType.PlayerJoined:
+                    if(playerId == -1)
+                        playerId = PlayerJoinedPayload.Unpack(msg.payload).playerId;
+                    break;
+
                 case NetType.Map:
                     var mapIn = MapPayload.Unpack(msg.payload);
 
                     Debug.Log("[Client] Received map");
                     mapRenderer.RenderMap(mapIn);
+
+                    // or some another action to trigger first worker spawn
+                    InnitWorker(mapIn.map);
+                    break;
+
+                case NetType.SpawnUnit:
+                    var unitIn = NetUnit.Unpack(msg.payload);
+                    Debug.Log("[Client] Received unit");
+
+                    mapRenderer.RenderUnit(unitIn);
+                    break;
+
+                case NetType.MoveUnit:
+                    var moveData = MoveUnitPayload.Unpack(msg.payload);
+                    Debug.Log($"[Client] Server approved move for unit {moveData.unitId}");
+                    
+                    mapRenderer.MoveUnitVisual(moveData.unitId, moveData.x, moveData.y);
+                    break;
+
+                case NetType.Error:
+                    var errData = ErrorPayload.Unpack(msg.payload);
+                    Debug.LogWarning($"[Server Error] {errData.message}");
                     break;
 
                 default:
@@ -203,6 +265,40 @@ public class Client : IDisposable {
                     break;
             }
         } catch { }
+    }
+
+    private void InnitWorker(LocalMap map) {
+        int2 sec = getMapSector();
+
+        int sectorWidth = map.w / 3;
+        int sectorHeight = map.h / 3;
+
+        int minX = sec.x * sectorWidth;
+        int maxX = (sec.x + 1) * sectorWidth;
+
+        int minY = sec.y * sectorHeight;
+        int maxY = (sec.y + 1) * sectorHeight;
+
+        int2 pos = new int2(
+            UnityEngine.Random.Range(minX, maxX),
+            UnityEngine.Random.Range(minY, maxY)
+        );
+
+        RequestUnit(pos, UnitType.Worker);
+    }
+
+    private int2 getMapSector() {
+        switch (playerId) {
+            case 0: return new int2(0,0);
+            case 1: return new int2(2,2);
+            case 2: return new int2(0,2);
+            case 3: return new int2(2,0);
+            case 4: return new int2(0,1);
+            case 5: return new int2(2,1);
+            case 6: return new int2(1,0);
+            case 7: return new int2(1,2);
+            default: return new int2(1,1);
+        }
     }
 }
 

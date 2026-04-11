@@ -1339,6 +1339,9 @@ MonoBehaviour:
   - {fileID: 11400000, guid: b00ba82c85c077f449a667a555d6e5d9, type: 2}
   - {fileID: 11400000, guid: 5c6da1f82e7ebd34884124a5e2fe9831, type: 2}
   - {fileID: 11400000, guid: 692f29cfafc8ba24fa1ef8234a6adce6, type: 2}
+  unitPrefs:
+  - {fileID: 3673201294105688550, guid: efd066802d29a63428bfa0ac36403a3b, type: 3}
+  - {fileID: 3673201294105688550, guid: aa74fe2c616cab749ae8ae6513ba7bc9, type: 3}
   tilemap: {fileID: 1237914371}
   offset: {x: -5, y: -5}
 --- !u!4 &563479254

@@ -3,12 +3,19 @@ using System;
 
 // These probably should be split for client and server...
 public enum NetType : byte {
+    // player related messages
     PlayerJoined = 1,
     PlayerDisconnected = 2,
-    // other player related messages
+
+    // map related messages
     MapInit = 10,
     Map = 11,
-    // other map related messages
+
+    // units
+    InnitUnit = 20,
+    SpawnUnit = 21,
+    MoveUnit = 22,
+
     Error = 255,
 }
 
@@ -26,10 +33,10 @@ public struct NetMsgHeader {
     }
 
     public static NetMsgHeader Unpack(BinaryReader reader) {
-        NetMsgHeader result = new NetMsgHeader();
-
-        result.size = reader.ReadUInt32();
-        result.type = (NetType)reader.ReadInt32();
+        NetMsgHeader result = new NetMsgHeader {
+            size = reader.ReadUInt32(),
+            type = (NetType)reader.ReadInt32()
+        };
 
         return result;
     }
@@ -67,6 +74,50 @@ public struct NetMsg {
         }
 
         return result;
+    }
+}
+
+public struct ErrorPayload {
+    public string message;
+
+    public static byte[] Pack(ErrorPayload data) {
+        using (var ms = new MemoryStream())
+        using (var writer = new BinaryWriter(ms)) {
+            // BinaryWriter автоматично записує довжину рядка перед самим рядком,
+            // тому це 100% безпечно для мережі.
+            writer.Write(data.message ?? "Unknown Error");
+            return ms.ToArray();
+        }
+    }
+
+    public static ErrorPayload Unpack(byte[] data) {
+        using (var ms = new MemoryStream(data))
+        using (var reader = new BinaryReader(ms)) {
+            return new ErrorPayload {
+                message = reader.ReadString()
+            };
+        }
+    }
+}
+
+public struct PlayerJoinedPayload {
+    public int playerId;
+
+    public static byte[] Pack(PlayerJoinedPayload data) {
+        using (var ms = new MemoryStream())
+        using (var writer = new BinaryWriter(ms)) {
+            writer.Write(data.playerId);
+            return ms.ToArray();
+        }
+    }
+
+    public static PlayerJoinedPayload Unpack(byte[] data) {
+        using (var ms = new MemoryStream(data))
+        using (var reader = new BinaryReader(ms)) {
+            return new PlayerJoinedPayload {
+                playerId = reader.ReadInt32()
+            };
+        }
     }
 }
 
@@ -117,6 +168,33 @@ public struct MapInitPayload {
             return new MapInitPayload {
                 w = w,
                 h = h,
+            };
+        }
+    }
+}
+
+public struct MoveUnitPayload {
+    public int unitId;
+    public int x;
+    public int y;
+
+    public static byte[] Pack(MoveUnitPayload data) {
+        using (var ms = new MemoryStream())
+        using (var writer = new BinaryWriter(ms)) {
+            writer.Write(data.unitId);
+            writer.Write(data.x);
+            writer.Write(data.y);
+            return ms.ToArray();
+        }
+    }
+
+    public static MoveUnitPayload Unpack(byte[] data) {
+        using (var ms = new MemoryStream(data))
+        using (var reader = new BinaryReader(ms)) {
+            return new MoveUnitPayload {
+                unitId = reader.ReadInt32(),
+                x = reader.ReadInt32(),
+                y = reader.ReadInt32()
             };
         }
     }

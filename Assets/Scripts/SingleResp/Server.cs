@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 using System.Threading;
-using System.Text;
 using UnityEngine;
 using System.Net;
 using System;
@@ -117,7 +116,7 @@ public class Server : IDisposable{
     public void processMsg(ServerConnectionMsg cmsg) {
         Debug.Log($"[Server] Processing message: connId = {cmsg.connId}, type = {cmsg.msg.header.type}");
         // Probably here I also need to sometimes send data only to responding client.
-        broadcastMsg(logic.ProcessRequest(cmsg, connDict.Keys));
+        broadcastMsg(logic.ProcessRequest(cmsg));
     }
 
     public void processLoop(CancellationToken token) {
@@ -138,15 +137,28 @@ public class Server : IDisposable{
     public void startConnection(TcpClient client) {
         int connId = nextConnId++;
 
-        var newConn = new ServerConnection();
-        newConn.id = connId;
-        newConn.client = client;
-        newConn.stream = client.GetStream();
-        newConn.cts = new CancellationTokenSource();
+        var newConn = new ServerConnection {
+            id = connId,
+            client = client,
+            stream = client.GetStream(),
+            cts = new CancellationTokenSource()
+        };
         newConn.recvTask = Task.Run(() => recvLoop(newConn, newConn.cts.Token));
 
         connDict.TryAdd(connId, newConn);
+
         Debug.Log($"[Server] New client connected with ID {connId}");
+
+        NetMsg idBroad = new NetMsg {
+            payload = PlayerJoinedPayload.Pack(new PlayerJoinedPayload { playerId = connId })
+        };
+
+        idBroad.header = new NetMsgHeader {
+            type = NetType.PlayerJoined,
+            size = (uint)idBroad.payload.Length,
+        };
+
+        broadcastMsg(idBroad);
     }
 
     private void acceptLoop(CancellationToken token) {
@@ -170,8 +182,7 @@ public class Server : IDisposable{
         recvSignal = new AutoResetEvent(false);
         logic = new ServerLogic(); // TODO: Remove this
 
-        listener.Server.SetSocketOption(
-            SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+        listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
         listener.Start();
 
         listenerTask = Task.Run(() => acceptLoop(serverCTS.Token));

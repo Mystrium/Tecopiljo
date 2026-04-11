@@ -1,14 +1,21 @@
-using UnityEngine;
 using UnityEngine.Tilemaps;
-using System;
+using System.Collections.Generic;
+using UnityEngine;
 
 public class MapManager : MonoBehaviour {
     public Camera mainCamera;
-    public LocalMap map;
     [Header("Tilemap / Tiles")]
     public TileBase[] tilePalette;
+    public GameObject[] unitPrefs;
     public Tilemap tilemap;
     public Vector2Int offset = Vector2Int.zero;
+
+    public event System.Action<int, Vector2Int, int> OnMoveIntent;
+    private Dictionary<int, UnitView> activeUnits = new Dictionary<int, UnitView>();
+
+    private LocalMap map;
+    private UnitView[,] unitGrid;
+    private UnitView selectedUnit = null;
 
     public void Awake() { }
 
@@ -23,21 +30,9 @@ public class MapManager : MonoBehaviour {
         return new Vector2Int(x, y);
     }
 
-    public void UpdateUnitTransforms() {
-        for (int x = 0; x < map.w; x++) {
-            for (int y = 0; y < map.h; y++) {
-                Debug.Log($"Iterating map {x} {y}");
-                if (map.tileArr[x, y].unit is Unit u) {
-                    Debug.Log($"Found unit at {x}, {y}");
-                    // This looks yucky
-                    u.data.transform.position = tilemap.CellToWorld(pos2unityPos(new Vector2Int(x, y)));
-                }
-            }
-        }
-    }
-
     public void RenderMap(MapPayload mapData) {
         map = mapData.map;
+        unitGrid = new UnitView[map.w, map.h];
 
         tilemap.ClearAllTiles();
 
@@ -52,8 +47,32 @@ public class MapManager : MonoBehaviour {
         }
 
         tilemap.RefreshAllTiles();
+    }
 
-        UpdateUnitTransforms();
+    public void RenderUnit(NetUnit netUnit) {
+        GameObject prefab = null;
+        foreach(var pref in unitPrefs) {
+            if(pref.name == netUnit.type.ToString()) {
+                prefab = pref;
+                break;
+            }
+        }
+
+        if (prefab == null) {
+            Debug.LogError($"[MapManager] No prefab for {netUnit.type}");
+            return;
+        }
+
+        Vector3 worldPos = tilemap.GetCellCenterWorld(pos2unityPos(new Vector2Int(netUnit.x, netUnit.y)));
+
+        GameObject obj = Instantiate(prefab, worldPos, Quaternion.identity);
+        UnitView view = obj.GetComponent<UnitView>();
+        view.Initialize(netUnit);
+
+        unitGrid[netUnit.x, netUnit.y] = view;
+        activeUnits[netUnit.unitId] = view;
+
+        Debug.Log($"[MapManager] Spawned {netUnit.type} on tile [{netUnit.x}, {netUnit.y}]");
     }
 
     private Vector3 prevPos = Vector3.zero;
@@ -68,17 +87,51 @@ public class MapManager : MonoBehaviour {
 
     void HandleMouseClick() {
         Vector3 mouseScreenPos = Input.mousePosition;
-        if(prevPos == mouseScreenPos) {
+        if((prevPos - mouseScreenPos).magnitude < 0.5) {
             Vector3 worldPos = mainCamera.ScreenToWorldPoint(mouseScreenPos);
             Vector3Int cellPos = tilemap.WorldToCell(worldPos);
 
             Vector2Int pos = unityPos2pos(cellPos);
 
             if (pos.x >= 0 && pos.x < map.w && pos.y >= 0 && pos.y < map.h) {
-                Debug.Log($"[Input] Клік! Tilemap: {cellPos} -> Масив: [{pos.x}, {pos.y}]");
-            } else {
-                Debug.Log("[Input] Клік поза межами ромбової мапи.");
+                Debug.Log($"[Input] Click! Tilemap: {cellPos} -> Arr: [{pos.x}, {pos.y}]");
+                UnitView clickedUnit = unitGrid[pos.x, pos.y];
+
+                if (clickedUnit != null) {
+                    DeselectUnit();
+                    SelectUnit(clickedUnit);
+                } else if (selectedUnit != null) {
+                    OnMoveIntent?.Invoke(selectedUnit.state.unitId, pos, selectedUnit.state.playerIdx);
+                    DeselectUnit();
+                }
             }
+        }
+    }
+
+    private void SelectUnit(UnitView unit) {
+        Debug.Log($"[Input] Unit: {unit.name}");
+        selectedUnit = unit;
+        selectedUnit.Select();
+    }
+
+    private void DeselectUnit() {
+        if(selectedUnit) {
+            selectedUnit.Deselect();
+            selectedUnit = null;
+        }
+    }
+
+    public void MoveUnitVisual(int unitId, int newX, int newY) {
+        if (activeUnits.TryGetValue(unitId, out UnitView unit)) {
+            unitGrid[unit.state.x, unit.state.y] = null;
+
+            unit.state.x = newX;
+            unit.state.y = newY;
+
+            unitGrid[newX, newY] = unit;
+
+            Vector3 worldPos = tilemap.GetCellCenterWorld(pos2unityPos(new Vector2Int(newX, newY)));
+            unit.transform.position = worldPos; 
         }
     }
 }
