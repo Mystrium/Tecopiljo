@@ -1,5 +1,4 @@
 using System.IO;
-using System;
 
 // These probably should be split for client and server...
 public enum NetType : byte {
@@ -15,6 +14,7 @@ public enum NetType : byte {
     InnitUnit = 20,
     SpawnUnit = 21,
     MoveUnit = 22,
+    AttackUnit = 23,
 
     Error = 255,
 }
@@ -195,6 +195,57 @@ public struct MoveUnitPayload {
                 unitId = reader.ReadInt32(),
                 x = reader.ReadInt32(),
                 y = reader.ReadInt32()
+            };
+        }
+    }
+}
+
+public struct AttackIntentPayload {
+    public int attackerId;
+    public int targetId;
+
+    public static byte[] Pack(AttackIntentPayload data) {
+        using (var ms = new MemoryStream())
+        using (var w = new BinaryWriter(ms)) {
+            w.Write(data.attackerId);
+            w.Write(data.targetId);
+            return ms.ToArray();
+        }
+    }
+
+    public static AttackIntentPayload Unpack(byte[] data) {
+        using (var ms = new MemoryStream(data))
+        using (var r = new BinaryReader(ms)) {
+            return new AttackIntentPayload {
+                attackerId = r.ReadInt32(),
+                targetId = r.ReadInt32()
+            };
+        }
+    }
+}
+
+public struct AttackResultPayload {
+    public int attackerId;
+    public int targetId;
+    public int newHp;
+
+    public static byte[] Pack(AttackResultPayload data) {
+        using (var ms = new MemoryStream())
+        using (var w = new BinaryWriter(ms)) {
+            w.Write(data.attackerId);
+            w.Write(data.targetId);
+            w.Write(data.newHp);
+            return ms.ToArray();
+        }
+    }
+
+    public static AttackResultPayload Unpack(byte[] data) {
+        using (var ms = new MemoryStream(data))
+        using (var r = new BinaryReader(ms)) {
+            return new AttackResultPayload {
+                attackerId = r.ReadInt32(),
+                targetId = r.ReadInt32(),
+                newHp = r.ReadInt32()
             };
         }
     }

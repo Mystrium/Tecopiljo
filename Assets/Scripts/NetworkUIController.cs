@@ -25,11 +25,16 @@ public class NetworkUIController : MonoBehaviour {
     [Header("Panels")]
     public GameObject mainMenuPanel;
     public GameObject multiplayerPanel;
+    public GameObject unitPanel;
     public GameObject gamePanel;
     public GameObject innitPanel;
 
+    [Header("Buttons")]
     public Button singlePlayer;
     public Button multiPlayer;
+    [Header("Unit Panel")]
+    public Button attackBtn;
+    public Button spawnBtn;
 
     [Header("Other")]
     public GameObject Mapper;
@@ -53,6 +58,9 @@ public class NetworkUIController : MonoBehaviour {
         singlePlayer.onClick.AddListener(() => StartHost()); // illusion
         multiPlayer.onClick.AddListener(ShowMultiplayer);
 
+        attackBtn.onClick.AddListener(MapScript.OnAttackButtonPressed);
+        spawnBtn.onClick.AddListener(MapScript.OnSpawnButtonPressed);
+
         ShowMainMenu();
         if (string.IsNullOrEmpty(portInput.text)) portInput.text = "7777";
     }
@@ -66,10 +74,10 @@ public class NetworkUIController : MonoBehaviour {
         MapScript.GetClickedTile();
     }
 
-    public void ShowMainMenu() {    mainMenuPanel.SetActive(true);  multiplayerPanel.SetActive(false); gamePanel.SetActive(false); innitPanel.SetActive(false); }
-    public void ShowMultiplayer() { mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(true);  gamePanel.SetActive(false); innitPanel.SetActive(false); }
-    public void ShowInnit() {       mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(false); gamePanel.SetActive(false); innitPanel.SetActive(true);  }
-    public void ShowGame() {        mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(false); gamePanel.SetActive(false);  innitPanel.SetActive(false); }
+    public void ShowMainMenu() {    mainMenuPanel.SetActive(true);  multiplayerPanel.SetActive(false); gamePanel.SetActive(false); innitPanel.SetActive(false); unitPanel.SetActive(false); }
+    public void ShowMultiplayer() { mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(true);  gamePanel.SetActive(false); innitPanel.SetActive(false); unitPanel.SetActive(false); }
+    public void ShowInnit() {       mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(false); gamePanel.SetActive(false); innitPanel.SetActive(true);  unitPanel.SetActive(false); }
+    public void ShowGame() {        mainMenuPanel.SetActive(false); multiplayerPanel.SetActive(false); gamePanel.SetActive(false);  innitPanel.SetActive(false); unitPanel.SetActive(true); }
 
     void StartGame() {
         int width = int.Parse(widthInput.text);

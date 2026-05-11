@@ -1,6 +1,13 @@
+using UnityEngine;
 using UnityEngine.Tilemaps;
 using System.Collections.Generic;
-using UnityEngine;
+using UnityEngine.EventSystems;
+
+public enum UnitMode {
+    Move,
+    Attack,
+    Spawn
+}
 
 public class MapManager : MonoBehaviour {
     public Camera mainCamera;
@@ -11,11 +18,15 @@ public class MapManager : MonoBehaviour {
     public Vector2Int offset = Vector2Int.zero;
 
     public event System.Action<int, Vector2Int, int> OnMoveIntent;
+    public event System.Action<int, int, int> OnAttackIntent;
+    public event System.Action<int, Vector2Int, UnitType, int> OnSpawnIntent;
+    
     private Dictionary<int, UnitView> activeUnits = new Dictionary<int, UnitView>();
+    private UnitView[,] unitGrid;
 
     private LocalMap map;
-    private UnitView[,] unitGrid;
     private UnitView selectedUnit = null;
+    private UnitMode currentMode = UnitMode.Move;
 
     public void Awake() { }
 
@@ -73,15 +84,24 @@ public class MapManager : MonoBehaviour {
         activeUnits[netUnit.unitId] = view;
 
         Debug.Log($"[MapManager] Spawned {netUnit.type} on tile [{netUnit.x}, {netUnit.y}]");
+        DeselectUnit();
     }
 
     private Vector3 prevPos = Vector3.zero;
     public void GetClickedTile() {
         if (map != null) {
-            if(Input.GetMouseButtonUp(0))
+            if(Input.GetMouseButtonUp(0)){
+                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) {
+                    return; // Блокуємо подальше виконання!
+                }
                 HandleMouseClick();
-            if(Input.GetMouseButtonDown(0))
+            }
+            if(Input.GetMouseButtonDown(0)) {
+                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) {
+                    return; // Блокуємо подальше виконання!
+                }
                 prevPos = Input.mousePosition;
+            }
         }
     }
 
@@ -96,6 +116,28 @@ public class MapManager : MonoBehaviour {
             if (pos.x >= 0 && pos.x < map.w && pos.y >= 0 && pos.y < map.h) {
                 Debug.Log($"[Input] Click! Tilemap: {cellPos} -> Arr: [{pos.x}, {pos.y}]");
                 UnitView clickedUnit = unitGrid[pos.x, pos.y];
+
+                if (currentMode == UnitMode.Attack) {
+                    if (clickedUnit != null) {
+                        Debug.Log($"[Input] Attack! {selectedUnit.name} > {clickedUnit.name}");
+                        
+                        OnAttackIntent?.Invoke(selectedUnit.state.unitId, clickedUnit.state.unitId, selectedUnit.state.playerIdx);
+                    } else
+                        Debug.Log("[Input] Attack canceled.");
+
+                    CancelTargeting();
+                    return;
+                } else if(currentMode == UnitMode.Spawn) {
+                    if(clickedUnit == null) {
+                        Debug.Log($"[Input] Spawn! {selectedUnit.name}");
+
+                        OnSpawnIntent?.Invoke(selectedUnit.state.unitId, pos, UnitType.Worker, selectedUnit.state.playerIdx);
+                    } else
+                        Debug.Log("[Input] Spawn canceled.");
+
+                    CancelTargeting();
+                    return;
+                }
 
                 if (clickedUnit != null) {
                     DeselectUnit();
@@ -132,6 +174,48 @@ public class MapManager : MonoBehaviour {
 
             Vector3 worldPos = tilemap.GetCellCenterWorld(pos2unityPos(new Vector2Int(newX, newY)));
             unit.transform.position = worldPos; 
+        }
+    }
+
+    public void OnAttackButtonPressed() {
+        if (selectedUnit != null) {
+            currentMode = UnitMode.Attack;
+            Debug.Log($"[UI] wait for target {selectedUnit.state.unitId}");
+        }
+    }
+
+    public void OnSpawnButtonPressed() {
+        if (selectedUnit != null) {
+            currentMode = UnitMode.Spawn;
+            Debug.Log($"[UI] wait for tile {selectedUnit.state.unitId}");
+        }
+    }
+
+    private void CancelTargeting() {
+        if (currentMode != UnitMode.Move) {
+            currentMode = UnitMode.Move;
+            Debug.Log("[UI] targeting canseled.");
+        }
+    }
+
+    public void AttackUnit(int attackerId, int targetId, int hp) {
+        // if (activeUnits.TryGetValue(attackerId, out UnitView attackerView)) {
+            // todo some attack animation
+        // }
+        DeselectUnit();
+
+        if (activeUnits.TryGetValue(targetId, out UnitView targetView)) {
+            if(hp <= 0) {
+                targetView.Kill();
+                unitGrid[targetView.state.x, targetView.state.y] = null;
+                activeUnits.Remove(targetId);
+                selectedUnit = null;
+
+                Debug.Log($"[Client] Unit {targetId} killed");
+            } else {
+                targetView.state.curHealth = hp;
+                Debug.Log($"[Client] Unit {targetId} hp ramained: {hp}");
+            }
         }
     }
 }

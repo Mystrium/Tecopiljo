@@ -3,7 +3,7 @@ Some letters about game
 TBS
 mobile
 multiplayer
-
+axial coords
 
 
 # Setting:

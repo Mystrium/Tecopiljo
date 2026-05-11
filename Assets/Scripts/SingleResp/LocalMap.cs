@@ -1,7 +1,6 @@
 using System.IO;
 
 public enum TileLandType : byte {
-    MIN = 0,
     WATER = 0,
     HILL = 1,
     DESERT = 2,

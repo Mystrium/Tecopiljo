@@ -172,6 +172,8 @@ public class Client : IDisposable {
     public Client(MapManager mapper) {
         mapRenderer = mapper;
         mapRenderer.OnMoveIntent += RequestMoveUnit;
+        mapRenderer.OnAttackIntent += RequestAttack;
+        mapRenderer.OnSpawnIntent += RequestUnit;
     }
 
     public void RequestMap(int w, int h) {
@@ -188,10 +190,12 @@ public class Client : IDisposable {
         ClientSend(NetMsg.Pack(msg));
     }
 
-    private void RequestUnit(int2 pos, UnitType type) {
+    private void RequestUnit(int spawnerId, Vector2Int pos, UnitType type, int player) {
+        if(player != playerId) return;
+
         Debug.Log("request innit unit");
         NetMsg msg = new NetMsg {
-            payload = UnitPayload.Pack(new UnitPayload { type = type, x = pos.x, y = pos.y, playerIdx = playerId })
+            payload = UnitPayload.Pack(new UnitPayload { spawnerId = spawnerId, type = type, x = pos.x, y = pos.y, playerIdx = playerId })
         };
         msg.header = new NetMsgHeader {
             type = NetType.InnitUnit,
@@ -222,6 +226,24 @@ public class Client : IDisposable {
         ClientSend(NetMsg.Pack(msg));
     }
 
+    private void RequestAttack(int unitId, int targetId, int player) {
+        if(player != playerId) return;
+
+        NetMsg msg = new NetMsg {
+            payload = AttackIntentPayload.Pack(new AttackIntentPayload {
+                attackerId = unitId,
+                targetId = targetId
+            })
+        };
+        msg.header = new NetMsgHeader {
+            type = NetType.AttackUnit,
+            size = (uint)msg.payload.Length,
+        };
+
+        Debug.Log($"[Client] Sending attack intent for unit {unitId} to {targetId}");
+        ClientSend(NetMsg.Pack(msg));
+    }
+
     public void ProcessResponse(NetMsg msg) { // <--- from server
         // some UI logic
         try {
@@ -239,6 +261,7 @@ public class Client : IDisposable {
 
                     // or some another action to trigger first worker spawn
                     InnitWorker(mapIn.map);
+                    InnitWorker(mapIn.map); // 2 units testing
                     break;
 
                 case NetType.SpawnUnit:
@@ -253,6 +276,13 @@ public class Client : IDisposable {
                     Debug.Log($"[Client] Server approved move for unit {moveData.unitId}");
                     
                     mapRenderer.MoveUnitVisual(moveData.unitId, moveData.x, moveData.y);
+                    break;
+
+                case NetType.AttackUnit:
+                    var attackRes = AttackResultPayload.Unpack(msg.payload);
+                    Debug.Log($"[Client] Server approved attack {attackRes.targetId}");
+
+                    mapRenderer.AttackUnit(attackRes.attackerId, attackRes.targetId, attackRes.newHp);
                     break;
 
                 case NetType.Error:
@@ -279,12 +309,12 @@ public class Client : IDisposable {
         int minY = sec.y * sectorHeight;
         int maxY = (sec.y + 1) * sectorHeight;
 
-        int2 pos = new int2(
+        Vector2Int pos = new Vector2Int(
             UnityEngine.Random.Range(minX, maxX),
             UnityEngine.Random.Range(minY, maxY)
         );
 
-        RequestUnit(pos, UnitType.Worker);
+        RequestUnit(0, pos, UnitType.Worker, playerId);
     }
 
     private int2 getMapSector() {

@@ -9,6 +9,7 @@ public enum UnitType : byte {
 public struct UnitPayload { // from client
     public UnitType type;
     public int playerIdx;
+    public int spawnerId;
 
     public int x;
     public int y;
@@ -18,6 +19,7 @@ public struct UnitPayload { // from client
         using (var w = new BinaryWriter(ms)) {
             w.Write((byte)unit.type);
             w.Write(unit.playerIdx);
+            w.Write(unit.spawnerId);
             w.Write(unit.x);
             w.Write(unit.y);
             
@@ -31,6 +33,7 @@ public struct UnitPayload { // from client
             return new UnitPayload {
                 type = (UnitType)r.ReadByte(),
                 playerIdx = r.ReadInt32(),
+                spawnerId = r.ReadInt32(),
                 x = r.ReadInt32(),
                 y = r.ReadInt32(),
             };
