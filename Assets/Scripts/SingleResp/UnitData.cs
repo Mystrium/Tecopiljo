@@ -3,7 +3,7 @@ using System.IO;
 public enum UnitType : byte {
     NULL = 0,
     Worker = 1,
-    TestUnit = 2
+    Fighter = 2
 }
 
 public struct UnitPayload { // from client

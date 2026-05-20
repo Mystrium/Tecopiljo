@@ -91,15 +91,13 @@ public class MapManager : MonoBehaviour {
     public void GetClickedTile() {
         if (map != null) {
             if(Input.GetMouseButtonUp(0)){
-                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) {
-                    return; // Блокуємо подальше виконання!
-                }
+                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                    return;
                 HandleMouseClick();
             }
             if(Input.GetMouseButtonDown(0)) {
-                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) {
-                    return; // Блокуємо подальше виконання!
-                }
+                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                    return;
                 prevPos = Input.mousePosition;
             }
         }
@@ -131,7 +129,7 @@ public class MapManager : MonoBehaviour {
                     if(clickedUnit == null) {
                         Debug.Log($"[Input] Spawn! {selectedUnit.name}");
 
-                        OnSpawnIntent?.Invoke(selectedUnit.state.unitId, pos, UnitType.Worker, selectedUnit.state.playerIdx);
+                        OnSpawnIntent?.Invoke(selectedUnit.state.unitId, pos, UnitType.Fighter, selectedUnit.state.playerIdx);
                     } else
                         Debug.Log("[Input] Spawn canceled.");
 

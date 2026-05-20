@@ -250,3 +250,30 @@ public struct AttackResultPayload {
         }
     }
 }
+
+
+public struct SpawnIntentPayload {
+    public int spawnerId;
+    public int unitType;
+    public int x;
+    public int y;
+
+    public static byte[] Pack(AttackIntentPayload data) {
+        using (var ms = new MemoryStream())
+        using (var w = new BinaryWriter(ms)) {
+            w.Write(data.attackerId);
+            w.Write(data.targetId);
+            return ms.ToArray();
+        }
+    }
+
+    public static AttackIntentPayload Unpack(byte[] data) {
+        using (var ms = new MemoryStream(data))
+        using (var r = new BinaryReader(ms)) {
+            return new AttackIntentPayload {
+                attackerId = r.ReadInt32(),
+                targetId = r.ReadInt32()
+            };
+        }
+    }
+}
