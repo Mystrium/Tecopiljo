@@ -105,7 +105,7 @@ public class MapManager : MonoBehaviour {
 
     void HandleMouseClick() {
         Vector3 mouseScreenPos = Input.mousePosition;
-        if((prevPos - mouseScreenPos).magnitude < 0.5) {
+        if((prevPos - mouseScreenPos).magnitude < 0.7) {
             Vector3 worldPos = mainCamera.ScreenToWorldPoint(mouseScreenPos);
             Vector3Int cellPos = tilemap.WorldToCell(worldPos);
 
@@ -212,6 +212,7 @@ public class MapManager : MonoBehaviour {
                 Debug.Log($"[Client] Unit {targetId} killed");
             } else {
                 targetView.state.curHealth = hp;
+                targetView.PlayHitSound();
                 Debug.Log($"[Client] Unit {targetId} hp ramained: {hp}");
             }
         }

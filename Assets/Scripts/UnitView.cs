@@ -8,7 +8,15 @@ public class UnitView : MonoBehaviour {
     public Texture2D unitMaskTexture; 
     private MaterialPropertyBlock propBlock;
 
+    [Header("Audio")]
+    public AudioSource audioSource;
+    public AudioClip hitSound;
+    public AudioClip deathSound;
+
     public void Initialize(NetUnit serverData) {
+        if (audioSource == null) {
+            audioSource = GetComponent<AudioSource>();
+        }
         this.state = serverData;
 
         spriteRenderer = GetComponent<SpriteRenderer>();
@@ -25,6 +33,10 @@ public class UnitView : MonoBehaviour {
                 propBlock.SetTexture("_Mask", unitMaskTexture);
 
             spriteRenderer.SetPropertyBlock(propBlock);
+        }
+
+        if (audioSource == null) {
+            audioSource = GetComponent<AudioSource>();
         }
 
         UpdateVisuals();
@@ -51,7 +63,17 @@ public class UnitView : MonoBehaviour {
         transform.position -= new Vector3(0, 0.2f, 0);
     }
 
-    public void Kill() { Destroy(gameObject); }
+    public void PlayHitSound() {
+        if (audioSource != null && hitSound != null) {
+            audioSource.PlayOneShot(hitSound);
+        }
+    }
+
+    public void Kill() {
+        if (audioSource != null && deathSound != null)
+            audioSource.PlayOneShot(deathSound);
+        Destroy(gameObject);
+    }
 
     private Color playerColor(int playerId) {
         switch(playerId) {
